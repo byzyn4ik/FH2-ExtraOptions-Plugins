@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "id": "azimuth-graphics-options",
+  "name": "Azimuth Graphics Options",
+  "author": "Max Petrovsky (byzyn4ik)",
+  "version": "1.0.0",
+  "description": "Azimuth's graphics settings (frame rate, V-sync, resolution, display mode, graphics preset, shadows, texture filtering, anti-aliasing, HDR) on Forza Horizon 2's Video settings page; frame rate, display mode and shadow distance apply at once.",
+  "dependencies": []
+}
