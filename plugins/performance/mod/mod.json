@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "id": "performance",
+  "name": "Performance",
+  "author": "Max Petrovsky (byzyn4ik)",
+  "version": "1.0.0",
+  "description": "An FPS counter in the top-right corner (FPS, GPU load and video memory; Detailed adds frame times, the 1% low and the GPU frame time), an FPS counter row on the Video settings page and an optional performance log (CSV).",
+  "dependencies": []
+}
