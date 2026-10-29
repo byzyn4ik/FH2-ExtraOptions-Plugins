@@ -1,21 +1,26 @@
 // Azimuth Graphics Options for Forza Horizon 2 (Extra Options plugin).
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// The Azimuth graphics rows and their keys in Azimuth 1.x's data\azimuth.ini,
-// as the Extra Options fork (src/ForzaHorizon2_ExtraOptions-0.3.2-openbox,
-// features/graphics_launcher.c) had them:
+// The Azimuth rows and their keys in Azimuth 1.x's data\azimuth.ini (the
+// same sections and keys in 1.0.2 and 1.0.4; their INI readers match):
 //
-//   [title-1a96545b]  frame_rate, vsync, resolution, graphics, shadow_detail
-//                     (with shadow_distance and shadow_redraw), texture_filtering,
-//                     antialiasing, hdr
+//   [title-1a96545b]  frame_rate (30..1000; absent: the title's own 30),
+//                     vsync, resolution, graphics, shadow_detail (with
+//                     shadow_distance and shadow_redraw), texture_filtering,
+//                     antialiasing, hdr,
+//                     audio (system | stereo | multichannel; absent: stereo),
+//                     volume (0..100; absent: 100)
 //   [launcher]        display
 //
-// Frame rate offers what Azimuth 1.0.2's own launcher offers (live.h,
-// frame_rates): 30 and the steps up to the display's refresh rate. As in that
-// launcher, a saved rate between two choices shows as the lower one.
+// Video page: frame rate ... HDR. Audio page: audio output and volume.
+// Frame rate offers what Azimuth's own launcher offers (live.h, frame_rates):
+// 30 and the steps up to the display's refresh rate. As in that launcher, a
+// saved rate between two choices shows as the lower one.
 // Azimuth 1.x has no frame_pacing key (it always paces in real time), so that
-// row is kept for the table's order but never shown, as in the fork.
+// row is kept for the table's order but never shown.
 // Choosing Shadows or Texture filtering sets graphics=custom.
+// Keys Azimuth has that no row writes (aspect, reflections, car_detail,
+// particles, motion_blur, scenery_detail, language, speech) are kept as they are.
 #pragma once
 #include <string>
 #include <vector>
@@ -33,14 +38,17 @@ enum Row {
     kTextureFiltering,
     kAntiAliasing,
     kHdr,
+    kAudioOutput,
+    kVolume,
     kRowCount
 };
 
-enum Language { kEnglish, kPolish };
+enum Page { kVideoPage, kAudioPage };
+enum Language { kEnglish, kPolish, kUkrainian };
 
 // What applies while the game runs (see live.h); the rows' descriptions say so.
 struct LiveState {
-    bool frame_rate, display, shadow_distance, shadow_rate;
+    bool frame_rate, display, shadow_distance, shadow_rate, volume;
 };
 
 namespace rows {
@@ -56,8 +64,14 @@ bool frame_rates_set();
 const std::vector<int> &frame_rates();
 int frame_rate_value(int index);
 
+// Rows a page shows can be turned off as a group ([Graphics] / [Audio] Enabled).
+void enable_page(Page page, bool on);
 bool shown(unsigned row);
+Page page(unsigned row);
+// The Volume row is a slider (0..100 as 0.0..1.0); the others are spinners.
+bool slider(unsigned row);
 unsigned count(unsigned row);
+// The row's choice index (Volume: 0..100).
 int get(unsigned row);
 // Writes the row's keys; false if the value is out of range, unchanged or
 // cannot be written.
@@ -66,8 +80,8 @@ bool set(unsigned row, int value);
 // (0 low, 1 default, 2 high, 3 ultra).
 int shadow_level();
 
-const char *property(unsigned row);   // binding name on the Video page, "GfxFrameRate"
-const char *collection(unsigned row); // its choices, "GfxFrameRateChoices"
+const char *property(unsigned row);   // binding name, "GfxFrameRate"
+const char *collection(unsigned row); // its choices, "GfxFrameRateChoices" (nullptr for a slider)
 const wchar_t *choice(unsigned row, unsigned index, Language language);
 const char *name(unsigned row, Language language);
 std::string description(unsigned row, Language language, const LiveState &live);

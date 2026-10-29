@@ -1,9 +1,10 @@
 // Azimuth Graphics Options for Forza Horizon 2 (Extra Options plugin).
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Native calls and object layouts are those Extra Options 0.3.2 uses for its
-// own Video page rows (features/video_options.c), checked here before use.
-#include "video_page.h"
+// Native calls and object layouts are those Extra Options uses for its own
+// settings rows (features/video_options.c in 0.3.2 and 0.4.4), checked here
+// before use.
+#include "settings_pages.h"
 
 #include <cstddef>
 #include <cstring>
@@ -11,10 +12,11 @@
 
 #include "call_chain.h"
 #include "common.h"
+#include "language.h"
 #include "live.h"
 
 namespace azg {
-namespace video {
+namespace pages {
 
 namespace {
 
@@ -26,7 +28,9 @@ enum : uint32_t {
     kMakeString = 0x13fe8e0,
     kInsertItem = 0xb52170,
     kRegisterVideoType = 0xeca710,
+    kRegisterAudioType = 0xc803c0,
     kIntProperty = 0xed81f0,
+    kFloatProperty = 0xed6e90,
     kCollectionProperty = 0xed77d0,
     kRegisterProperty = 0x155ee30,
     kAllocate = 0x3229c0,
@@ -34,10 +38,11 @@ enum : uint32_t {
     kObjectInit = 0x143eb80,
     kObjectCleanup = 0x1442050,
     kBoxInt = 0x4702d0,
+    kBoxFloat = 0x3f5990,
     kPropertyChanged = 0xcf9c60,
     kGetResource = 0xaabec0,
     kVideoRegistry = 0x35470d0,
-    kTextTables = 0x3662990,
+    kAudioRegistry = 0x35107b0,
     kExtraOptionsThunk = 0x13fe354,
 };
 
@@ -55,7 +60,9 @@ const Prologue kPrologues[] = {
     {kMakeString, "MakeString", {0x40, 0x57, 0x48, 0x83, 0xec, 0x30, 0x48, 0xc7, 0x44, 0x24, 0x28, 0xfe}},
     {kInsertItem, "InsertItem", {0x48, 0x8b, 0xc4, 0x57, 0x48, 0x81, 0xec, 0x80, 0x00, 0x00, 0x00, 0x48}},
     {kRegisterVideoType, "RegisterVideoType", {0x40, 0x53, 0x48, 0x81, 0xec, 0xd0, 0x00, 0x00, 0x00, 0x48, 0xc7, 0x44}},
+    {kRegisterAudioType, "RegisterAudioType", {0x40, 0x53, 0x48, 0x81, 0xec, 0xd0, 0x00, 0x00, 0x00, 0x48, 0xc7, 0x44}},
     {kIntProperty, "IntProperty", {0x40, 0x57, 0x48, 0x83, 0xec, 0x30, 0x48, 0xc7, 0x44, 0x24, 0x20, 0xfe}},
+    {kFloatProperty, "FloatProperty", {0x40, 0x57, 0x48, 0x83, 0xec, 0x30, 0x48, 0xc7, 0x44, 0x24, 0x20, 0xfe}},
     {kCollectionProperty, "CollectionProperty", {0x40, 0x57, 0x48, 0x83, 0xec, 0x30, 0x48, 0xc7, 0x44, 0x24, 0x20, 0xfe}},
     {kRegisterProperty, "RegisterProperty", {0x48, 0x8b, 0x41, 0x40, 0x48, 0x89, 0x42, 0x08, 0x48, 0x89, 0x51, 0x40}},
     {kAllocate, "Allocate", {0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x20, 0x8b, 0x15}},
@@ -63,9 +70,20 @@ const Prologue kPrologues[] = {
     {kObjectInit, "ObjectInit", {0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d}},
     {kObjectCleanup, "ObjectCleanup", {0x40, 0x53, 0x48, 0x83, 0xec, 0x20, 0x48, 0x8d, 0x05, 0xb3, 0xd0, 0x9f}},
     {kBoxInt, "BoxInt", {0x40, 0x53, 0x48, 0x83, 0xec, 0x30, 0x48, 0x8b, 0xd9, 0xc7, 0x44, 0x24}},
+    {kBoxFloat, "BoxFloat", {0x40, 0x53, 0x48, 0x83, 0xec, 0x30, 0x48, 0x8b, 0xd9, 0xc7, 0x44, 0x24}},
     {kPropertyChanged, "PropertyChanged", {0x40, 0x57, 0x48, 0x83, 0xec, 0x60, 0x48, 0xc7, 0x44, 0x24, 0x20, 0xfe}},
     {kGetResource, "GetResource", {0x48, 0x83, 0xec, 0x18, 0x48, 0x8b, 0x41, 0x38, 0xc7, 0x04, 0x24, 0x00}},
 };
+// "lea rax,[rip+name]" in each property template: the property it copies.
+const struct {
+    uint32_t lea;
+    const char *name;
+} kTemplateNames[] = {{0xed825b, "Subtitles"}, {0xed6efb, "Gamma"}, {0xed782e, "OnOffOptions"}};
+// "lea rcx,[rip+registry]; call RegisterProperty" in each page type's set-up.
+const struct {
+    uint32_t lea, registry;
+    const char *page;
+} kRegistrations[] = {{0xeca808, kVideoRegistry, "Video"}, {0xc804b8, kAudioRegistry, "Audio"}};
 // After the call: mov [rdi],r15; mov rcx,[rax]; mov [rdi+8],rcx.
 const unsigned char kAfterCall[] = {0x4c, 0x89, 0x3f, 0x48, 0x8b, 0x08, 0x48, 0x89, 0x4f, 0x08};
 // The collection's vtables and where they go, as Extra Options sets them.
@@ -95,7 +113,6 @@ static_assert(sizeof(NativeProperty) == 0x58, "native property descriptor");
 static_assert(offsetof(NativeProperty, name) == 0x40, "native property name");
 static_assert(offsetof(NativeResource, bytes) == 0x28, "native resource buffer");
 
-typedef void **(*GetResource)(void *reader, void **output);
 typedef void *(*Allocate)(size_t);
 typedef void (*Free)(void *);
 typedef void (*ObjectFunction)(void *);
@@ -107,6 +124,11 @@ typedef void (*PropertyChanged)(void *, void *);
 typedef void **(*MakeString)(void **, const wchar_t *);
 typedef void (*InsertItem)(void *, int, void *);
 typedef void (*RegisterProperty)(void *, NativePropertyLink *);
+typedef void **(*GetResource)(void *, void **);
+
+const uint32_t kTypeSetUp[] = {kRegisterVideoType, kRegisterAudioType};
+const uint32_t kRegistry[] = {kVideoRegistry, kAudioRegistry};
+const char *const kPageName[] = {"Video", "Audio"};
 
 unsigned char *image;
 GetResource previous_reader;
@@ -115,7 +137,7 @@ bool live_apply;
 NativeProperty properties[2 * kRowCount]; // values, then choices
 NativePropertyLink links[2 * kRowCount];
 void *choices[kRowCount];
-volatile LONG registered, told_layout, told_failure, told_added;
+volatile LONG registered[2], told_layout[2], told_failure[2], told_added[2];
 SRWLOCK registration_lock = SRWLOCK_INIT;
 void *resource_vtable[7];
 
@@ -140,6 +162,10 @@ unsigned property_index(const NativeProperty *property) {
 void **get_value(void **output, NativeProperty *property, void *) {
     unsigned index = property_index(property);
     *output = nullptr;
+    if (index < kRowCount && rows::slider(index)) {
+        float value = (float)rows::get(index) / 100.0f;
+        return native<BoxValue>(kBoxFloat)(output, &value);
+    }
     if (index < kRowCount) {
         int value = rows::get(index);
         return native<BoxValue>(kBoxInt)(output, &value);
@@ -154,12 +180,24 @@ void **get_value(void **output, NativeProperty *property, void *) {
 void set_value(NativeProperty *property, void *page, void *boxed) {
     unsigned row = property_index(property);
     int value;
-    if (!boxed || row >= kRowCount || !safe_read((unsigned char *)boxed + 0x28, &value, sizeof(value))) return;
+    if (!boxed || row >= kRowCount) return;
+    if (rows::slider(row)) {
+        // A 0..1 slider; the row keeps whole percent.
+        float level;
+        if (!safe_read((unsigned char *)boxed + 0x28, &level, sizeof(level)) || !(level >= -0.001f && level <= 1.001f))
+            return;
+        value = (int)(level * 100.0f + 0.5f);
+        if (value < 0) value = 0;
+        if (value > 100) value = 100;
+    } else if (!safe_read((unsigned char *)boxed + 0x28, &value, sizeof(value))) {
+        return;
+    }
     if (!rows::set(row, value)) return;
     if (live_apply) live::apply(row, value);
     native<PropertyChanged>(kPropertyChanged)(page, property);
-    // Shadows and Texture filtering switch Graphics to Custom.
-    if (row != kPreset) native<PropertyChanged>(kPropertyChanged)(page, &properties[kPreset]);
+    // Shadows and Texture filtering switch Graphics to Custom (same page).
+    if (row == kShadows || row == kTextureFiltering)
+        native<PropertyChanged>(kPropertyChanged)(page, &properties[kPreset]);
 }
 
 bool make_choices(unsigned row, Language language) {
@@ -183,31 +221,34 @@ bool make_choices(unsigned row, Language language) {
     return true;
 }
 
-// Once per process, before the page's XAML is parsed.
-bool register_properties(Language language) {
-    if (InterlockedCompareExchange(&registered, 0, 0)) return true;
+// Once per page and process, before the page's XAML is parsed.
+bool register_properties(Page page, Language language) {
+    if (InterlockedCompareExchange(&registered[page], 0, 0)) return true;
     AcquireSRWLockExclusive(&registration_lock);
-    bool ok = registered != 0;
+    bool ok = registered[page] != 0;
     if (!ok) {
-        native<void (*)(void)>(kRegisterVideoType)();
+        native<void (*)(void)>(kTypeSetUp[page])();
         ok = true;
         for (unsigned row = 0; row < kRowCount && ok; ++row)
-            if (rows::shown(row) && !make_choices(row, language)) ok = false;
+            if (rows::shown(row) && rows::page(row) == page && !rows::slider(row) && !make_choices(row, language))
+                ok = false;
+        NativeProperty *int_kind = (NativeProperty *)native<Factory>(kIntProperty)();
+        NativeProperty *float_kind = (NativeProperty *)native<Factory>(kFloatProperty)();
+        NativeProperty *list_kind = (NativeProperty *)native<Factory>(kCollectionProperty)();
+        ok = ok && int_kind && float_kind && list_kind;
         if (!ok) {
             for (unsigned row = 0; row < kRowCount; ++row) {
+                if (rows::page(row) != page) continue;
                 release_object(choices[row]);
                 choices[row] = nullptr;
             }
         } else {
-            NativeProperty *int_kind = (NativeProperty *)native<Factory>(kIntProperty)();
-            NativeProperty *list_kind = (NativeProperty *)native<Factory>(kCollectionProperty)();
-            ok = int_kind && list_kind;
-            for (unsigned index = 0; index < 2 * kRowCount && ok; ++index) {
+            for (unsigned index = 0; index < 2 * kRowCount; ++index) {
                 unsigned row = index % kRowCount;
-                if (!rows::shown(row)) continue;
                 bool value = index < kRowCount;
+                if (!rows::shown(row) || rows::page(row) != page || (!value && rows::slider(row))) continue;
                 NativeProperty *property = &properties[index];
-                const NativeProperty *kind = value ? int_kind : list_kind;
+                const NativeProperty *kind = !value ? list_kind : rows::slider(row) ? float_kind : int_kind;
                 native<ObjectFunction>(kObjectInit)(property);
                 property->vtable = kind->vtable;
                 memcpy((unsigned char *)property + 0x28, (const unsigned char *)kind + 0x28, 0x30);
@@ -215,9 +256,9 @@ bool register_properties(Language language) {
                 property->getter = (void *)get_value;
                 property->setter = value ? (void *)set_value : nullptr;
                 links[index].property = property;
-                native<RegisterProperty>(kRegisterProperty)(image + kVideoRegistry, &links[index]);
+                native<RegisterProperty>(kRegisterProperty)(image + kRegistry[page], &links[index]);
             }
-            if (ok) InterlockedExchange(&registered, 1);
+            InterlockedExchange(&registered[page], 1);
         }
     }
     ReleaseSRWLockExclusive(&registration_lock);
@@ -231,6 +272,9 @@ void *delete_resource(NativeResource *resource, unsigned flags) {
 }
 
 const char kVideoClass[] = "x:Class=\"ForzaUI.A_VideoOptions\"";
+const char kAudioClass[] = "x:Class=\"ForzaUI.A_AudioOptions\"";
+// Extra Options 0.4.4: a plugin's own page reusing a native options class.
+const char kStandalone[] = "<!-- EO:StandaloneOptionsPage -->";
 
 INIT_ONCE rates_once = INIT_ONCE_STATIC_INIT;
 
@@ -244,32 +288,47 @@ BOOL CALLBACK find_frame_rates(PINIT_ONCE, PVOID, PVOID *) {
     return TRUE;
 }
 
-// Once, when the Video page is first read (Azimuth's window is up by then).
-void prepare_frame_rates() { InitOnceExecuteOnce(&rates_once, find_frame_rates, nullptr, nullptr); }
+bool page_shown(Page page) {
+    for (unsigned row = 0; row < kRowCount; ++row)
+        if (rows::shown(row) && rows::page(row) == page) return true;
+    return false;
+}
 
 void **read_resource(void *reader, void **output) {
     previous_reader(reader, output);
     NativeResource *original = (NativeResource *)*output;
-    if (!original || !original->bytes || original->length <= 0 || original->length > (1 << 20) ||
-        !find(original->bytes, (size_t)original->length, kVideoClass))
+    if (!original || !original->bytes || original->length <= 0 || original->length > (1 << 20)) return output;
+    size_t length = (size_t)original->length;
+    Page page;
+    if (find(original->bytes, length, kVideoClass))
+        page = kVideoPage;
+    else if (find(original->bytes, length, kAudioClass))
+        page = kAudioPage;
+    else
         return output;
-    size_t capacity = (size_t)original->length + 0x10000;
+    if (!page_shown(page) || find(original->bytes, length, kStandalone)) return output;
+    size_t capacity = length + 0x10000;
     NativeResource *replacement = (NativeResource *)native<Allocate>(kAllocate)(sizeof(NativeResource) + capacity);
     if (!replacement) return output;
     char *bytes = (char *)(replacement + 1);
-    prepare_frame_rates();
-    Language language = game_language(image);
+    // Once, when the Video page is first read (Azimuth's window is up by then).
+    if (page == kVideoPage) InitOnceExecuteOnce(&rates_once, find_frame_rates, nullptr, nullptr);
+    Language language = language::current(image);
     const char *why = nullptr;
-    size_t length = extend_xaml(original->bytes, (size_t)original->length, bytes, capacity, language, live_text, &why);
-    if (!length) {
+    size_t extended = page == kVideoPage
+                          ? extend_video(original->bytes, length, bytes, capacity, language, live_text, &why)
+                          : extend_audio(original->bytes, length, bytes, capacity, language, live_text, &why);
+    if (!extended) {
         native<Free>(kFree)(replacement);
-        if (!InterlockedExchange(&told_layout, 1))
-            say(std::string("the Video page is not as expected (") + (why ? why : "?") + "); its rows are not added");
+        if (!InterlockedExchange(&told_layout[page], 1))
+            say(std::string("the ") + kPageName[page] + " page is not as expected (" + (why ? why : "?") +
+                "); its rows are not added");
         return output;
     }
-    if (!register_properties(language)) {
+    if (!register_properties(page, language)) {
         native<Free>(kFree)(replacement);
-        if (!InterlockedExchange(&told_failure, 1)) say("the Video page properties could not be made; rows not added");
+        if (!InterlockedExchange(&told_failure[page], 1))
+            say(std::string("the ") + kPageName[page] + " page properties could not be made; rows not added");
         return output;
     }
     // As Extra Options does: the game's resource object with this buffer,
@@ -279,12 +338,13 @@ void **read_resource(void *reader, void **output) {
     resource_vtable[1] = (void *)delete_resource; // vtable slot 0, after the type information
     replacement->vtable = resource_vtable + 1;
     replacement->bytes = bytes;
-    replacement->length = (int)length;
+    replacement->length = (int)extended;
     replacement->capacity = (int)capacity;
     *output = replacement;
     release_object(original);
-    if (!InterlockedExchange(&told_added, 1))
-        say(std::string("Azimuth rows added to the Video page (") + (language == kPolish ? "Polish" : "English") + ")");
+    if (!InterlockedExchange(&told_added[page], 1))
+        say(std::string("Azimuth rows added to the ") + kPageName[page] + " page (" +
+            (language == kPolish ? "Polish" : language == kUkrainian ? "Ukrainian" : "English") + ")");
     return output;
 }
 
@@ -315,10 +375,10 @@ struct Buffer {
     }
 };
 
-void add_resources(Buffer &out, Language language, const LiveState &live) {
+void add_resources(Buffer &out, Page page, Language language, const LiveState &live) {
     for (unsigned row = 0; row < kRowCount; ++row) {
-        if (!rows::shown(row)) continue;
-        out.add("<local:TileMenuDataItem x:Key=\"EO_");
+        if (!rows::shown(row) || rows::page(row) != page) continue;
+        out.add("<local:TileMenuDataItem x:Key=\"AZG_");
         out.add(rows::property(row));
         out.add("\" Heading=\"");
         out.attribute(rows::name(row, language));
@@ -326,12 +386,25 @@ void add_resources(Buffer &out, Language language, const LiveState &live) {
         out.attribute(rows::description(row, language, live).c_str());
         out.add("\"/>");
     }
+    if (page == kAudioPage && rows::shown(kVolume))
+        // The page's own volume slider look, from 0 and in 5 % steps.
+        out.add("<Style x:Key=\"AZG_VolumeSlider\" TargetType=\"Slider\" "
+                "BasedOn=\"{StaticResource A_Style_Slider_Options_Audio_Min1}\">"
+                "<Setter Property=\"Minimum\" Value=\"0\"/><Setter Property=\"SmallChange\" Value=\"0.05\"/></Style>");
 }
 
-void add_rows(Buffer &out, Language language) {
+void add_rows(Buffer &out, Page page, Language language) {
     for (unsigned row = 0; row < kRowCount; ++row) {
-        if (!rows::shown(row)) continue;
-        out.add("<local:SpinnerControl Tag=\"{StaticResource EO_");
+        if (!rows::shown(row) || rows::page(row) != page) continue;
+        if (rows::slider(row)) {
+            out.add("<Slider Value=\"{Binding ");
+            out.add(rows::property(row));
+            out.add("}\" Tag=\"{StaticResource AZG_");
+            out.add(rows::property(row));
+            out.add("}\" Style=\"{StaticResource AZG_VolumeSlider}\"/>");
+            continue;
+        }
+        out.add("<local:SpinnerControl Tag=\"{StaticResource AZG_");
         out.add(rows::property(row));
         out.add("}\" Style=\"{StaticResource A_Style_SpinnerControl_Default}\" Label=\"");
         out.attribute(rows::name(row, language));
@@ -341,6 +414,44 @@ void add_rows(Buffer &out, Language language) {
         out.add(rows::collection(row));
         out.add("}\"/>");
     }
+}
+
+const char kList[] = "<local:CommonListBox x:Name=\"OptionsList\"";
+const char kListEnd[] = "</local:CommonListBox>";
+const char kFixedStyle[] = "Style=\"{StaticResource A_Style_ListBox_List_Default}\"";
+const char kScrollableStyle[] = "Style=\"{StaticResource A_Style_ListBox_Scrollable}\"";
+const char kBom[] = "\xef\xbb\xbf"; // the game's XML reader reads UTF-8 only after it
+
+// Copies `text` with the resources added at `resources`, the rows at
+// `rows_at`, the list style swapped at `style` and the height replaced at
+// `height` (12 bytes) by `new_height`.
+size_t write_page(const char *text, size_t length, char *output, size_t capacity, Page page, Language language,
+                  const LiveState &live, const char *resources, const char *rows_at, const char *style,
+                  const char *height, const char *new_height, const char **why) {
+    Buffer out = {output, 0, capacity, true};
+    const char *end = text + length;
+    if (length < 3 || memcmp(text, kBom, 3)) out.add(kBom, 3);
+    for (const char *at = text; at < end && out.valid;) {
+        if (at == resources) add_resources(out, page, language, live);
+        if (at == rows_at) add_rows(out, page, language);
+        if (at == style) {
+            // Many rows now: the scrollable list style instead of the fixed one.
+            out.add(kScrollableStyle);
+            at += sizeof(kFixedStyle) - 1;
+        } else if (at == height) {
+            out.add(new_height);
+            at += 12;
+        } else {
+            out.add(at, 1);
+            ++at;
+        }
+    }
+    if (!out.valid) {
+        if (why) *why = "the extended page does not fit its buffer";
+        return 0;
+    }
+    output[out.length] = 0;
+    return out.length;
 }
 
 } // namespace
@@ -355,6 +466,27 @@ const char *check_game(const unsigned char *game, uint32_t size, const char **ta
             return problem.c_str();
         }
     }
+    for (const auto &t : kTemplateNames) {
+        unsigned char lea[7];
+        int32_t displacement;
+        char name[16] = {};
+        if (!safe_read(game + t.lea, lea, sizeof(lea)) || lea[0] != 0x48 || lea[1] != 0x8d || lea[2] != 0x05 ||
+            (memcpy(&displacement, lea + 3, 4), !safe_read(game + t.lea + 7 + displacement, name, strlen(t.name) + 1)) ||
+            strcmp(name, t.name)) {
+            problem = std::string("the game's ") + t.name + " property template is not as expected";
+            return problem.c_str();
+        }
+    }
+    for (const auto &r : kRegistrations) {
+        unsigned char code[12];
+        int32_t displacement, call;
+        if (!safe_read(game + r.lea, code, sizeof(code)) || code[0] != 0x48 || code[1] != 0x8d || code[2] != 0x0d ||
+            code[7] != 0xe8 || (memcpy(&displacement, code + 3, 4), r.lea + 7 + (uint32_t)displacement != r.registry) ||
+            (memcpy(&call, code + 8, 4), r.lea + 12 + (uint32_t)call != kRegisterProperty)) {
+            problem = std::string("the game's ") + r.page + " page type is not as expected";
+            return problem.c_str();
+        }
+    }
     unsigned char code[5];
     if (!safe_read(game + kResourceCall, code, 5) || code[0] != 0xe8 ||
         !bytes_equal(game + kResourceCall + 5, kAfterCall, sizeof(kAfterCall)))
@@ -362,7 +494,7 @@ const char *check_game(const unsigned char *game, uint32_t size, const char **ta
     const unsigned char *called = (const unsigned char *)call_target(game + kResourceCall);
     static std::string what;
     if (called == game + kGetResource) {
-        what = "the game's resource reader 0xaabec0 (Extra Options' Video hook is not there)";
+        what = "the game's resource reader 0xaabec0 (Extra Options' hook is not there)";
     } else if (called == game + kExtraOptionsThunk) {
         unsigned char thunk[12];
         if (!safe_read(called, thunk, 12) || thunk[0] != 0x48 || thunk[1] != 0xb8 || thunk[10] != 0xff ||
@@ -379,31 +511,16 @@ const char *check_game(const unsigned char *game, uint32_t size, const char **ta
     return nullptr;
 }
 
-Language game_language(const unsigned char *game) {
-    void *manager = nullptr;
-    unsigned char code[32];
-    if (!game || !safe_read(game + kTextTables, &manager, sizeof(manager)) || !manager ||
-        !safe_read((unsigned char *)manager + 0x30, code, sizeof(code)))
-        return kEnglish;
-    size_t length, capacity;
-    memcpy(&length, code + 16, sizeof(length));
-    memcpy(&capacity, code + 24, sizeof(capacity));
-    if (capacity != 15 || length != 2 || code[2] != 0) return kEnglish;
-    return (code[0] | 0x20) == 'p' && (code[1] | 0x20) == 'l' ? kPolish : kEnglish;
-}
-
-size_t extend_xaml(const char *text, size_t length, char *output, size_t capacity, Language language,
-                   const LiveState &live, const char **why) {
+size_t extend_video(const char *text, size_t length, char *output, size_t capacity, Language language,
+                    const LiveState &live, const char **why) {
     static const char kTitle[] = "Content=\"{local:Loc ScreenTitles.IDS_VideoOptions}\"";
     static const char kBrightness[] = "A_Style_ContentControl_BrightnessSquare";
-    static const char kList[] = "<local:CommonListBox x:Name=\"OptionsList\"";
-    static const char kFixedStyle[] = "Style=\"{StaticResource A_Style_ListBox_List_Default}\"";
     static const char kExtraOptionsRow[] = "<local:SpinnerControl Tag=\"{StaticResource EO_";
     const char *fail = nullptr;
-    const char *end = text + length;
+    const char *end = text ? text + length : nullptr;
     const char *resources = find(text, length, "</ResourceDictionary>");
     const char *list = find(text, length, kList);
-    const char *list_end = list ? find_in(list, end, "</local:CommonListBox>") : nullptr;
+    const char *list_end = list ? find_in(list, end, kListEnd) : nullptr;
     const char *opening_end = list_end ? find_in(list, list_end, ">") : nullptr;
     const char *height = opening_end ? find_in(list, opening_end, "Height=\"110\"") : nullptr;
     if (!height && opening_end) height = find_in(list, opening_end, "Height=\"275\"");
@@ -412,13 +529,15 @@ size_t extend_xaml(const char *text, size_t length, char *output, size_t capacit
     if (!rows_at) rows_at = list_end;
     if (!text || !output || capacity < 4 || !find(text, length, kVideoClass))
         fail = "not the Video page";
-    else if (find(text, length, "EO_GfxFrameRate"))
+    else if (find(text, length, kStandalone))
+        fail = "a plugin's own page on the Video page class";
+    else if (find(text, length, "AZG_GfxFrameRate"))
         fail = "it already has the Azimuth rows";
     else if (!find(text, length, kTitle) || !find(text, length, kBrightness) ||
              find(text, length, "<StackPanel Visibility=\"Collapsed\"") || find(text, length, "EO_KbmMode") ||
              find(text, length, "EO_WorldTimeOfDay"))
-        // Extra Options' KEYBOARD & MOUSE and World pages (keyboard-mouse,
-        // time-weather) are built from the Video page XAML.
+        // The Extra Options fork's KEYBOARD & MOUSE and World pages
+        // (keyboard-mouse, time-weather) are built from the Video page XAML.
         fail = "no Video title or brightness preview: a page built from it";
     else if (!resources || !list || resources > list)
         fail = "no resources before the options list";
@@ -428,30 +547,38 @@ size_t extend_xaml(const char *text, size_t length, char *output, size_t capacit
         if (why) *why = fail;
         return 0;
     }
-    Buffer out = {output, 0, capacity, true};
-    static const char bom[] = "\xef\xbb\xbf"; // the game's XML reader reads UTF-8 only after it
-    if (length < 3 || memcmp(text, bom, 3)) out.add(bom, 3);
-    for (const char *at = text; at < end && out.valid;) {
-        if (at == resources) add_resources(out, language, live);
-        if (at == rows_at) add_rows(out, language);
-        if (at == style) {
-            // Many rows now: the scrollable list style instead of the fixed one.
-            out.add("Style=\"{StaticResource A_Style_ListBox_Scrollable}\"");
-            at += sizeof(kFixedStyle) - 1;
-        } else if (at == height) {
-            out.add(style ? "Height=\"440\"" : "Height=\"275\"");
-            at += 12;
-        } else {
-            out.add(at, 1);
-            ++at;
-        }
-    }
-    if (!out.valid) {
-        if (why) *why = "the extended page does not fit its buffer";
+    return write_page(text, length, output, capacity, kVideoPage, language, live, resources, rows_at, style, height,
+                      style ? "Height=\"440\"" : "Height=\"275\"", why);
+}
+
+size_t extend_audio(const char *text, size_t length, char *output, size_t capacity, Language language,
+                    const LiveState &live, const char **why) {
+    static const char kTitle[] = "Content=\"{local:Loc ScreenTitles.IDS_AudioOptions}\"";
+    const char *fail = nullptr;
+    const char *end = text ? text + length : nullptr;
+    const char *resources = find(text, length, "</ResourceDictionary>");
+    const char *list = find(text, length, kList);
+    const char *list_end = list ? find_in(list, end, kListEnd) : nullptr;
+    const char *opening_end = list_end ? find_in(list, list_end, ">") : nullptr;
+    const char *style = opening_end ? find_in(list, opening_end, kFixedStyle) : nullptr;
+    if (!text || !output || capacity < 4 || !find(text, length, kAudioClass))
+        fail = "not the Audio page";
+    else if (find(text, length, kStandalone))
+        fail = "a plugin's own page on the Audio page class";
+    else if (find(text, length, "AZG_AzAudioOutput") || find(text, length, "AZG_AzVolume"))
+        fail = "it already has the Azimuth rows";
+    else if (!find(text, length, kTitle))
+        fail = "no Audio title";
+    else if (!resources || !list || resources > list)
+        fail = "no resources before the options list";
+    else if (!list_end || !opening_end || find_in(opening_end, list_end, kList))
+        fail = "the options list is not as expected";
+    if (fail) {
+        if (why) *why = fail;
         return 0;
     }
-    output[out.length] = 0;
-    return out.length;
+    return write_page(text, length, output, capacity, kAudioPage, language, live, resources, list_end, style, nullptr,
+                      nullptr, why);
 }
 
 bool install(unsigned char *game, const LiveState &live, bool apply) {
@@ -463,11 +590,11 @@ bool install(unsigned char *game, const LiveState &live, bool apply) {
     ChainResult result = chain_call(game + kResourceCall, (void *)read_resource, (void **)&previous_reader);
     if (result != kChained) {
         say(std::string("the XAML resource call could not be chained (") + chain_text(result) +
-            "); the Video page is left as it is");
+            "); the settings pages are left as they are");
         return false;
     }
     return true;
 }
 
-} // namespace video
+} // namespace pages
 } // namespace azg

@@ -1,28 +1,32 @@
 // Azimuth Graphics Options for Forza Horizon 2: an Extra Options mod-loader plugin.
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Installed as mods\Azimuth Graphics Options\plugins\AzimuthGraphicsOptions.dll beside a stock
-// Extra Options 0.3.2 (Azimuth 1.0.2). From FH2PluginInitialize it checks the
-// host (Azimuth 1.0.2), the game image and Azimuth's data\azimuth.ini layout;
-// then it adds Azimuth's graphics settings (frame rate, V-sync, resolution,
-// display mode, graphics preset, shadows, texture filtering, anti-aliasing,
-// HDR) as rows of the game's Video settings page, writes them to
+// Installed as mods\Azimuth Graphics Options\plugins\AzimuthGraphicsOptions.dll
+// beside a stock Extra Options (0.4.4 on Azimuth 1.0.4; 0.3.2 on 1.0.2 works
+// the same way). From FH2PluginInitialize it identifies the host (Azimuth
+// 1.0.4 or 1.0.2), checks the game image and Azimuth's data\azimuth.ini
+// layout; then it adds Azimuth's graphics settings (frame rate, V-sync,
+// resolution, display mode, graphics preset, shadows, texture filtering,
+// anti-aliasing, HDR) as rows of the game's Video settings page and its sound
+// settings (audio output, volume) as rows of the Audio page, writes them to
 // data\azimuth.ini and applies what it can at once (see live.h). With any
 // mismatch it installs nothing and logs why. Settings are in
-// AzimuthGraphicsOptions.ini beside the DLL; Extra Options' own INI is not touched.
+// AzimuthGraphicsOptions.ini beside the DLL; Extra Options' own INI is not
+// touched (only read for its custom language, see language.h).
 #include <string>
 
 #include "common.h"
 #include "fh2_plugin.h"
+#include "language.h"
 #include "live.h"
 #include "rows.h"
-#include "video_page.h"
+#include "settings_pages.h"
 
 #ifdef AZG_TEST_EXPORTS
 #include "call_chain.h"
 #endif
 
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.1.0"
 #define PLUGIN_EXPORT extern "C" __declspec(dllexport)
 
 #ifdef AZG_TEST_EXPORTS
@@ -42,12 +46,16 @@ bool absolute(const std::wstring &path) {
     return (path.size() > 1 && path[1] == L':') || (!path.empty() && (path[0] == L'\\' || path[0] == L'/'));
 }
 
-std::wstring ini_text(const wchar_t *section, const wchar_t *key, const wchar_t *fallback) {
-    wchar_t value[1024];
-    GetPrivateProfileStringW(section, key, fallback, value, 1024, ini_path.c_str());
+std::wstring trimmed(const wchar_t *value) {
     std::wstring text = value;
     while (!text.empty() && (text.back() == L' ' || text.back() == L'\t')) text.pop_back();
     return text;
+}
+
+std::wstring ini_text(const wchar_t *section, const wchar_t *key, const wchar_t *fallback) {
+    wchar_t value[1024];
+    GetPrivateProfileStringW(section, key, fallback, value, 1024, ini_path.c_str());
+    return trimmed(value);
 }
 
 bool ini_flag(const wchar_t *section, const wchar_t *key, bool fallback) {
@@ -68,6 +76,18 @@ std::wstring module_folder(HMODULE module) {
     return n && n < MAX_PATH * 4 ? folder_of(std::wstring(path, n)) : std::wstring();
 }
 
+// The game's Mount folder: the game executable's folder, else the title's
+// folder in azimuth.ini (relative to the launcher) + \Mount.
+std::wstring mount_folder(void *game, const std::wstring &launcher, const std::wstring &azimuth_ini) {
+    std::wstring folder = module_folder((HMODULE)game);
+    if (!folder.empty() && folder != launcher) return folder;
+    wchar_t value[1024];
+    GetPrivateProfileStringW(L"title-1a96545b", L"folder", L"", value, 1024, azimuth_ini.c_str());
+    std::wstring title = trimmed(value);
+    if (title.empty()) return std::wstring();
+    return (absolute(title) || launcher.empty() ? title : launcher + L"\\" + title) + L"\\Mount";
+}
+
 } // namespace
 
 BOOL WINAPI DllMain(HINSTANCE, DWORD, LPVOID) { return TRUE; }
@@ -85,10 +105,13 @@ PLUGIN_EXPORT BOOL WINAPI FH2PluginInitialize(const FH2PluginContext *context) {
     ini_path = (dot == std::wstring::npos ? dll : dll.substr(0, dot)) + L".ini";
     set_log(context->log_utf8,
             ini_flag(L"Logging", L"Enabled", true) ? folder_of(dll) + L"\\AzimuthGraphicsOptions.log" : std::wstring());
-    if (!ini_flag(L"Graphics", L"Enabled", true)) {
-        say("[Graphics] Enabled=0; nothing is installed");
+    bool video = ini_flag(L"Graphics", L"Enabled", true), audio = ini_flag(L"Audio", L"Enabled", true);
+    if (!video && !audio) {
+        say("[Graphics] and [Audio] Enabled=0; nothing is installed");
         return TRUE;
     }
+    rows::enable_page(kVideoPage, video);
+    rows::enable_page(kAudioPage, audio);
     say("plugin " PLUGIN_VERSION " for Extra Options " +
         std::string(context->extra_options_version ? context->extra_options_version : "?"));
     if (context->adapter != FH2_PLUGIN_AZIMUTH) {
@@ -96,14 +119,17 @@ PLUGIN_EXPORT BOOL WINAPI FH2PluginInitialize(const FH2PluginContext *context) {
         return TRUE;
     }
     unsigned char *host = host_image();
-    if (const char *problem = live::check_host(host)) {
+    const char *problem = nullptr;
+    const live::Host *build = live::identify(host, &problem);
+    if (!build) {
         say(std::string(problem) + "; nothing is installed");
         return TRUE;
     }
+    say(std::string("host: Azimuth ") + live::host_name(build));
     unsigned char *game = (unsigned char *)context->game_image;
     const char *target = nullptr;
-    if (const char *problem = video::check_game(game, context->game_image_size, &target)) {
-        say(std::string(problem) + "; nothing is installed and the game is left as it is");
+    if (const char *mismatch = pages::check_game(game, context->game_image_size, &target)) {
+        say(std::string(mismatch) + "; nothing is installed and the game is left as it is");
         return TRUE;
     }
 
@@ -119,17 +145,20 @@ PLUGIN_EXPORT BOOL WINAPI FH2PluginInitialize(const FH2PluginContext *context) {
         say(layout + "; nothing is installed");
         return TRUE;
     }
+    language::configure(language::parse(ini_text(L"Captions", L"Language", L"auto")), launcher,
+                        mount_folder(context->game_image, launcher, azimuth_ini));
 
     bool apply_live = ini_flag(L"Graphics", L"LiveApply", true);
     LiveState text = {};
     if (apply_live) {
-        live::prepare(host, game);
+        live::prepare(build, host, game);
         text = live::state();
     } else {
         say("[Graphics] LiveApply=0: every change applies after a restart");
     }
-    if (!video::install(game, text, apply_live)) return TRUE;
-    say("Video page rows ready; settings in " + narrow(azimuth_ini) + "; the resource call at 0x16ebb37 is chained to " +
+    if (!pages::install(game, text, apply_live)) return TRUE;
+    say(std::string(video && audio ? "Video and Audio page rows" : video ? "Video page rows" : "Audio page rows") +
+        " ready; settings in " + narrow(azimuth_ini) + "; the resource call at 0x16ebb37 is chained to " +
         (target ? target : "?"));
     return TRUE;
 }
@@ -139,19 +168,35 @@ PLUGIN_EXPORT BOOL WINAPI FH2PluginInitialize(const FH2PluginContext *context) {
 // entry points for tests\run_tests.py and tests\plugin_test.cpp.
 PLUGIN_EXPORT void AzgTestUseHost(unsigned char *host) { test_host = host; }
 
-PLUGIN_EXPORT const char *AzgTestCheckHost(const unsigned char *host) { return azg::live::check_host(host); }
+// nullptr when `host` is a known build, else why not.
+PLUGIN_EXPORT const char *AzgTestCheckHost(const unsigned char *host) {
+    const char *why = nullptr;
+    return azg::live::identify(host, &why) ? nullptr : why;
+}
+PLUGIN_EXPORT const char *AzgTestHostName(const unsigned char *host) {
+    const char *why = nullptr;
+    const azg::live::Host *build = azg::live::identify(host, &why);
+    return build ? azg::live::host_name(build) : nullptr;
+}
+PLUGIN_EXPORT uint32_t AzgTestHostSite(const unsigned char *host, unsigned which) {
+    const char *why = nullptr;
+    return azg::live::test_site(azg::live::identify(host, &why), which);
+}
 
 PLUGIN_EXPORT const char *AzgTestCheckGame(const unsigned char *game, uint32_t size) {
     const char *target = nullptr;
-    const char *problem = azg::video::check_game(game, size, &target);
+    const char *problem = azg::pages::check_game(game, size, &target);
     return problem ? problem : target;
 }
 
-PLUGIN_EXPORT size_t AzgTestExtendXaml(const char *text, size_t length, char *output, size_t capacity, int polish,
-                                       int live) {
-    azg::LiveState state = {(live & 1) != 0, (live & 2) != 0, (live & 4) != 0, (live & 8) != 0};
+// live: bit 0 frame rate, 1 display, 2 shadow distance, 3 shadow rate, 4 volume.
+PLUGIN_EXPORT size_t AzgTestExtendXaml(int page, const char *text, size_t length, char *output, size_t capacity,
+                                       int language, int live) {
+    azg::LiveState state = {(live & 1) != 0, (live & 2) != 0, (live & 4) != 0, (live & 8) != 0, (live & 16) != 0};
     const char *why = nullptr;
-    return azg::video::extend_xaml(text, length, output, capacity, polish ? azg::kPolish : azg::kEnglish, state, &why);
+    azg::Language lang = (azg::Language)(language >= 0 && language <= 2 ? language : 0);
+    return page ? azg::pages::extend_audio(text, length, output, capacity, lang, state, &why)
+                : azg::pages::extend_video(text, length, output, capacity, lang, state, &why);
 }
 
 PLUGIN_EXPORT void AzgTestRowsFile(const wchar_t *path) { azg::rows::set_file(path); }
@@ -172,10 +217,20 @@ PLUGIN_EXPORT int AzgTestFrameRates(unsigned refresh, int *out, int capacity) {
 PLUGIN_EXPORT void AzgTestSetFrameRates(const int *rates, int count) {
     azg::rows::set_frame_rates(std::vector<int>(rates, rates + count));
 }
-PLUGIN_EXPORT const wchar_t *AzgTestRowChoice(unsigned row, unsigned index, int polish) {
-    return azg::rows::choice(row, index, polish ? azg::kPolish : azg::kEnglish);
+PLUGIN_EXPORT const wchar_t *AzgTestRowChoice(unsigned row, unsigned index, int language) {
+    return azg::rows::choice(row, index, (azg::Language)(language >= 0 && language <= 2 ? language : 0));
 }
 PLUGIN_EXPORT unsigned AzgTestRowCount(unsigned row) { return azg::rows::count(row); }
+
+// choice: 0 auto, 1 en, 2 pl, 3 uk; pack: a Ukrainian pack in the ru-RU slot.
+PLUGIN_EXPORT void AzgTestLanguage(int choice, int pack) {
+    azg::language::test_set((azg::language::Choice)choice, pack != 0);
+}
+PLUGIN_EXPORT int AzgTestCurrentLanguage(const unsigned char *game) { return (int)azg::language::current(game); }
+PLUGIN_EXPORT int AzgTestConfigureLanguage(const wchar_t *launcher, const wchar_t *mount) {
+    azg::language::configure(azg::language::kAuto, launcher, mount);
+    return azg::language::ukrainian_pack();
+}
 
 PLUGIN_EXPORT int AzgTestChain(unsigned char *site, void *handler, void **previous) {
     return (int)azg::chain_call(site, handler, previous);

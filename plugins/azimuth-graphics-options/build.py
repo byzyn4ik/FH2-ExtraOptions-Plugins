@@ -8,8 +8,8 @@ Writes:
   <output>/mods/Azimuth Graphics Options/plugins/AzimuthGraphicsOptions.ini
   <output>/tests/AzimuthGraphicsOptionsTest.dll  (the same code with test entry points)
   <output>/tests/plugin_test.exe                  (offline plugin test)
---test also runs tests/run_tests.py on the result (it passes --game, --azimuth
-and --upstream through). Nothing is installed.
+--test also runs tests/run_tests.py on the result (it passes --game, --azimuth,
+--azimuth102, --eo-release, --eo-source and --upstream through). Nothing is installed.
 Zig 0.15.2: --zig, else the ZIG environment variable, else zig on PATH.
 """
 
@@ -25,7 +25,7 @@ SRC = HERE / "src"
 MOD_NAME = "Azimuth Graphics Options"
 DLL_NAME = "AzimuthGraphicsOptions.dll"
 INI_NAME = "AzimuthGraphicsOptions.ini"
-PLUGIN = ["common.cpp", "rows.cpp", "live.cpp", "call_chain.cpp", "video_page.cpp", "plugin.cpp"]
+PLUGIN = ["common.cpp", "rows.cpp", "language.cpp", "live.cpp", "call_chain.cpp", "settings_pages.cpp", "plugin.cpp"]
 
 
 def find_zig(given):
@@ -47,7 +47,10 @@ def main():
     parser.add_argument("--output", type=Path, default=HERE / "out")
     parser.add_argument("--test", action="store_true", help="run the offline tests after building")
     parser.add_argument("--game", type=Path, help="tests: the FH2 game folder (default ~/FH2)")
-    parser.add_argument("--azimuth", type=Path, help="tests: the Azimuth 1.0.2 release ZIP")
+    parser.add_argument("--azimuth", type=Path, help="tests: the Azimuth 1.0.4 release ZIP")
+    parser.add_argument("--azimuth102", type=Path, help="tests: the Azimuth 1.0.2 release ZIP")
+    parser.add_argument("--eo-release", type=Path, help="tests: the Extra Options 0.4.4 release folder (winmm.dll)")
+    parser.add_argument("--eo-source", type=Path, help="tests: the Extra Options 0.4.4 source tree")
     parser.add_argument("--upstream", type=Path, help="tests: an Extra Options git clone (origin/main)")
     options = parser.parse_args()
     zig = find_zig(options.zig)
@@ -77,9 +80,9 @@ def main():
         print(path)
     if options.test:
         command = [sys.executable, str(HERE / "tests" / "run_tests.py"), "--output", str(output), "--zig", str(zig)]
-        for name in ("game", "azimuth", "upstream"):
+        for name in ("game", "azimuth", "azimuth102", "eo_release", "eo_source", "upstream"):
             if getattr(options, name):
-                command += ["--" + name, str(getattr(options, name))]
+                command += ["--" + name.replace("_", "-"), str(getattr(options, name))]
         subprocess.run(command, check=True)
 
 

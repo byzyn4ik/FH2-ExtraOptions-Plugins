@@ -1,6 +1,7 @@
 // Forza Horizon 2 Extra Options plugin API, copied unchanged from upstream
 // Extra Options 0.3.2 (https://github.com/RokkuDayo/ForzaHorizon2_ExtraOptions,
-// commit 60cffc1, GPL-3.0).
+// commit 60cffc1, GPL-3.0); Extra Options 0.4.4 (commit d66c85d) has the same
+// API.
 #ifndef FH2_PLUGIN_API_H
 #define FH2_PLUGIN_API_H
 #define WIN32_LEAN_AND_MEAN
