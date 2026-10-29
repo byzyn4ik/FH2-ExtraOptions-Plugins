@@ -11,7 +11,8 @@ this process' own memory (relocated, RWX) and patched there; their code never
 runs. Defaults: --game ~/FH2, --azimuth <game>/azimuth-windows-1.0.4.zip,
 --azimuth102 <game>/azimuth-windows-1.0.2.zip, --upstream <game>/src/eo-pr/wt-upstream,
 --release <game>/src/eo-pr/upstream-0.4.4/FH2_Extra_Options_0.4.4-azimuth/Azimuth,
---graphics ~/Developer/FH2-ExtraOptions-Azimuth-Graphics-Options/out/tests/AzimuthGraphicsOptionsTest.dll.
+--graphics <output>/../azimuth-graphics-options/tests/AzimuthGraphicsOptionsTest.dll (the
+top-level build.py's test build of that plugin).
 A missing input skips the tests that need it.
 
  1. package   mod.json as Extra Options 0.4.4 validates it, the mod layout, the
@@ -1551,10 +1552,11 @@ def main():
     parser.add_argument("--azimuth102", type=Path)
     parser.add_argument("--upstream", type=Path)
     parser.add_argument("--release", type=Path)
-    parser.add_argument("--graphics", type=Path, default=Path.home() / "Developer" /
-                        "FH2-ExtraOptions-Azimuth-Graphics-Options" / "out" / "tests" / "AzimuthGraphicsOptionsTest.dll")
+    parser.add_argument("--graphics", type=Path)
     options = parser.parse_args()
     output = options.output.resolve()
+    # The top-level build.py builds Azimuth Graphics Options first, into out/build/azimuth-graphics-options.
+    options.graphics = options.graphics or output.parent / "azimuth-graphics-options" / "tests" / "AzimuthGraphicsOptionsTest.dll"
     game = options.game
     runs = output / "test-runs"
     shutil.rmtree(runs, ignore_errors=True)

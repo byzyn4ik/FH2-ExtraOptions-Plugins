@@ -198,33 +198,32 @@ replaced, all entry hooks at once.
 
 ## Build and test
 
+From the repository's root:
+
 ```text
-py build.py --zig <zig 0.15.2>\zig.exe --test
+py build.py --zig <zig 0.15.2>\zig.exe --plugin azimuth-graphics-options --plugin keyboard-mouse --test
 ```
 
-writes `out\mods\Keyboard & Mouse\...` and a test build of the DLL with extra
-entry points (`out\tests\KeyboardMouseTest.dll`), then runs
-`tests\run_tests.py`. The tests never run the game and only read its files
+writes `out\mods\Keyboard & Mouse\...`, `outelease\keyboard-mouse-<version>.zip`
+and a test build of the DLL with extra entry points
+(`outuild\keyboard-mouse	ests\KeyboardMouseTest.dll`), then runs
+`testsun_tests.py`. The tests never run the game and only read its files
 (`--game`, default `%USERPROFILE%\FH2`): the game executable and Azimuth's
 executables (mapped and patched in the test's own memory), `UI.zip`, Azimuth's
 release ZIPs (`--azimuth`, `--azimuth102`), the Extra Options 0.4.4 release
 (`--release`) and source (`--upstream`; its settings page code is built for
-the test), and Azimuth Graphics Options' test DLL (`--graphics`). Missing
-inputs skip the tests that need them. They cover the package, the INI, every
-Azimuth host site (found again from the code, with capstone when installed),
-Extra Options' patch sites and keys, the game guards and every hook and chain,
-the hub and page XAML on top of Extra Options' and Graphics Options' pages,
-all languages, key rebinding and the plugin entry behind simulated Extra
-Options hooks.
-
-Every push builds and tests the plugin on GitHub Actions
-(`.github/workflows/build.yml`, Zig 0.15.2 checked by SHA-256); a pushed tag
-`v*` also publishes a release with the mod folder zipped.
+the test), and Azimuth Graphics Options' test DLL (built alongside, or
+`--graphics`). Missing inputs skip the tests that need them. They cover the
+package, the INI, every Azimuth host site (found again from the code, with
+capstone when installed), Extra Options' patch sites and keys, the game guards
+and every hook and chain, the hub and page XAML on top of Extra Options' and
+Graphics Options' pages, all languages, key rebinding and the plugin entry
+behind simulated Extra Options hooks.
 
 The sources (`src`) keep the keyboard & mouse code of Extra Options pull
-request #101; `src\fh2_plugin.h` is Extra Options' plugin API header,
-unchanged.
+request #101; `common\includeh2_plugin.h` is Extra Options' plugin API
+header, unchanged.
 
 ## License
 
-GPL-3.0-or-later, as Extra Options. See `LICENSE`.
+GPL-3.0-or-later, as Extra Options. See `LICENSE` at the repository's root.

@@ -11,7 +11,7 @@ game executable is mapped into this process' own memory and patched there.
 Defaults: --game ~/FH2, --azimuth <game>/azimuth-windows-1.0.4.zip,
 --upstream <game>/src/eo-pr/wt-upstream,
 --release <game>/src/eo-pr/upstream-0.4.4/FH2_Extra_Options_0.4.4-azimuth/Azimuth,
---graphics ~/Developer/FH2-ExtraOptions-Azimuth-Graphics-Options.
+--graphics plugins/azimuth-graphics-options of this repository.
 A missing input skips the tests that need it.
 
 1. package   mod.json as Extra Options 0.4.4 validates it, the mod layout, the
@@ -586,7 +586,8 @@ def build_graphics(zig, source, output):
     folder.mkdir(parents=True, exist_ok=True)
     dll = folder / "AzimuthGraphicsOptionsTest.dll"
     command = [str(zig), "c++", "-target", "x86_64-windows-gnu", "-std=c++17", "-O2", "-w", "-DUNICODE", "-D_UNICODE",
-               "-fno-sanitize=all", "-shared", "-s", "-DAZG_TEST_EXPORTS", *[str(src / n) for n in names], "-luser32",
+               "-fno-sanitize=all", "-I", str(ROOT.parents[1] / "common" / "include"), "-shared", "-s",
+               "-DAZG_TEST_EXPORTS", *[str(src / n) for n in names], "-luser32",
                "-Wl,--out-implib," + str(folder / "graphics.lib"), "-o", str(dll)]
     run = subprocess.run(command, capture_output=True, text=True)
     if run.returncode:
@@ -800,7 +801,7 @@ def main():
         test_guards(loader)
         test_game(dll, loader, game / GAME_EXE)
     test_xaml(dll, options.zig, game, upstream,
-              options.graphics or Path.home() / "Developer" / "FH2-ExtraOptions-Azimuth-Graphics-Options", output)
+              options.graphics or ROOT.parent / "azimuth-graphics-options", output)
     test_captions(dll)
     test_d3d12(output, options.warp)
     print(f"{len(failures)} failure(s)" if failures else "all tests passed")

@@ -174,28 +174,29 @@ From `azimuth.exe` 1.0.4 (checked byte for byte by the tests):
 
 ## Build and test
 
+From the repository's root:
+
 ```text
-py build.py --zig <zig 0.15.2>\zig.exe --test
+py build.py --zig <zig 0.15.2>\zig.exe --plugin performance --test
 ```
 
-writes `out\mods\Performance\...`, a test build of the DLL with extra entry
-points (`out\tests\PerformanceTest.dll`) and the D3D12 test
-(`out\tests\d3d12_test.exe`), then runs `tests\run_tests.py`. The shaders are
-compiled with Windows' `d3dcompiler_47.dll` at build time. The tests never run
-the game and only read its files (`--game`, default `%USERPROFILE%\FH2`): the
-game executable (mapped and patched in the test's own memory) and `UI.zip`,
-Azimuth's release ZIP (`--azimuth`), the Extra Options 0.4.4 release
-(`--release`) and source (`--upstream`; its Video page edit is built for the
-test) and the Azimuth Graphics Options source (`--graphics`; its page edit is
-built for the test). The D3D12 test makes its own device and swap chains on
-hidden windows and attaches the plugin after them (and, in a second process,
-before any device); `--warp` runs it on WARP. Missing inputs skip the tests
-that need them; the D3D12 debug layer is used when Windows' optional
-"Graphics Tools" feature is installed.
-
-The plugin is laid out to move into a plugins monorepo as
-`plugins/performance/` (id `performance`).
+writes `out\mods\Performance\...`, `outelease\performance-<version>.zip`, a
+test build of the DLL with extra entry points
+(`outuild\performance	ests\PerformanceTest.dll`) and the D3D12 test
+(`outuild\performance	ests\d3d12_test.exe`), then runs
+`testsun_tests.py`. The shaders are compiled with Windows'
+`d3dcompiler_47.dll` at build time. The tests never run the game and only read
+its files (`--game`, default `%USERPROFILE%\FH2`): the game executable (mapped
+and patched in the test's own memory) and `UI.zip`, Azimuth's release ZIP
+(`--azimuth`), the Extra Options 0.4.4 release (`--release`) and source
+(`--upstream`; its Video page edit is built for the test) and the Azimuth
+Graphics Options source (`pluginszimuth-graphics-options`, or `--graphics`;
+its page edit is built for the test). The D3D12 test makes its own device and
+swap chains on hidden windows and attaches the plugin after them (and, in a
+second process, before any device); `--warp` runs it on WARP. Missing inputs
+skip the tests that need them; the D3D12 debug layer is used when Windows'
+optional "Graphics Tools" feature is installed.
 
 ## License
 
-GPL-3.0-or-later, as Extra Options. See `LICENSE`.
+GPL-3.0-or-later, as Extra Options. See `LICENSE` at the repository's root.
