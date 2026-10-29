@@ -1,13 +1,17 @@
 """Build the Custom Radio plugin for Forza Horizon 2 Extra Options.
 
-Usage: py build.py [--zig <zig.exe>] [--output out] [--test]
+Usage: py plugins/custom-radio/build.py [--zig <zig.exe>] [--output out] [--test] [--game <FH2 folder>]
+(the top-level build.py runs it with --output out/build/custom-radio)
 
 Writes:
   <output>/mods/Custom Radio/mod.json
   <output>/mods/Custom Radio/plugins/CustomRadio.dll
   <output>/mods/Custom Radio/plugins/CustomRadio.ini
   <output>/obj/CustomRadio-test.dll        (the same code with test exports)
---test also runs tests/run_tests.py on the result. Nothing is installed.
+--test also runs tests/run_tests.py on the result: with the game executable
+and Extra Options 0.4.4's release below --game (default ~/FH2) when they are
+there (else those checks skip; --game-exe and --extra-options name them
+directly). Nothing is installed.
 Zig 0.15.2: --zig, else the ZIG environment variable, else zig on PATH.
 
 Like Extra Options' own plugins, the DLL is plain C without a C runtime of
@@ -24,29 +28,17 @@ import subprocess
 import sys
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1] / "common"))
+import build_common as bc  # noqa: E402
+
 SRC = HERE / "src"
 MOD_NAME = "Custom Radio"
 DLL_NAME = "CustomRadio.dll"
 INI_NAME = "CustomRadio.ini"
 UNITS = ["support.c", "config.c", "hooks.c", "mp3.c", "radio.c", "plugin.c"]
 SYSTEM_LIBRARIES = ["kernel32", "user32", "msvcrt"]
-
-
-def find_zig(given):
-    for candidate in (given, os.environ.get("ZIG"), shutil.which("zig")):
-        if candidate and Path(candidate).is_file():
-            return Path(candidate).resolve()
-    sys.exit("zig not found: pass --zig <zig.exe> (Zig 0.15.2) or set ZIG")
-
-
-def show(command):
-    print(" ".join(Path(str(part)).name if os.sep in str(part) or "/" in str(part) else str(part)
-                   for part in command))
-
-
-def run(command):
-    show(command)
-    subprocess.run([str(part) for part in command], check=True)
+GAME_EXE = Path("Anthem_1.0.0.64_x64__8wekyb3d8bbwe/Mount/forza_durango_release_final.exe")
+EO_RELEASE = Path("src/eo-pr/upstream-0.4.4/FH2_Extra_Options_0.4.4-azimuth/Azimuth")
 
 
 def dll_exports(path):
@@ -83,7 +75,7 @@ def import_libraries(zig, build):
         text = f"LIBRARY {name}.dll\nEXPORTS\n" + "\n".join(dll_exports(system / f"{name}.dll")) + "\n"
         if not library.is_file() or not definition.is_file() or definition.read_text() != text:
             definition.write_text(text)
-            run([zig, "dlltool", "-m", "i386:x86-64", "-d", definition, "-l", library])
+            bc.run([zig, "dlltool", "-m", "i386:x86-64", "-d", definition, "-l", library])
         libraries.append(library)
     return libraries
 
@@ -97,22 +89,26 @@ def build_dll(zig, build, libraries, output, test):
                    "-fno-stack-protector", "-fms-extensions", "-funwind-tables", "-mcx16", "-O2",
                    "-D__USE_MINGW_ANSI_STDIO=0", "-DUNICODE", "-D_UNICODE",
                    "-Wall", "-Wextra", "-Wno-missing-field-initializers", "-Werror",
-                   "-isystem", include / "include", "-isystem", include / "libc" / "include" / "any-windows-any"]
+                   "-isystem", include / "include", "-isystem", include / "libc" / "include" / "any-windows-any",
+                   "-I", bc.INCLUDE]
         if test:
             command.append("-DCUSTOM_RADIO_TEST=1")
-        run(command + [SRC / unit, "-o", obj])
+        bc.run(command + [SRC / unit, "-o", obj])
         objects.append(obj)
-    run([zig, "lld-link", "/dll", "/entry:DllMain", "/machine:x64", "/nodefaultlib", "/dynamicbase",
-         "/nxcompat", "/Brepro", "/noimplib", "/out:" + str(output), *objects, *libraries])
+    bc.run([zig, "lld-link", "/dll", "/entry:DllMain", "/machine:x64", "/nodefaultlib", "/dynamicbase",
+            "/nxcompat", "/Brepro", "/noimplib", "/out:" + str(output), *objects, *libraries])
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--zig", help="zig.exe (0.15.2)")
     parser.add_argument("--output", type=Path, default=HERE / "out")
     parser.add_argument("--test", action="store_true", help="run the offline tests after building")
-    options = parser.parse_args()
-    zig = find_zig(options.zig)
+    parser.add_argument("--game", type=Path, default=Path.home() / "FH2", help="tests: the FH2 game folder")
+    parser.add_argument("--game-exe", type=Path, help="tests: forza_durango_release_final.exe")
+    parser.add_argument("--extra-options", type=Path, help="tests: Extra Options 0.4.4's release folder")
+    options = parser.parse_args(argv)
+    zig = bc.find_zig(options.zig)
     output = options.output.resolve()
     build = output / "obj"
     mod = output / "mods" / MOD_NAME
@@ -127,7 +123,14 @@ def main():
     for path in (mod / "mod.json", plugins / DLL_NAME, plugins / INI_NAME, build / "CustomRadio-test.dll"):
         print(path)
     if options.test:
-        subprocess.run([sys.executable, str(HERE / "tests" / "run_tests.py"), "--output", str(output)], check=True)
+        command = [sys.executable, str(HERE / "tests" / "run_tests.py"), "--output", str(output)]
+        game_exe = options.game_exe or options.game / GAME_EXE
+        release = options.extra_options or options.game / EO_RELEASE
+        if game_exe.is_file():
+            command += ["--game-exe", str(game_exe)]
+        if (release / "winmm.dll").is_file():
+            command += ["--extra-options", str(release)]
+        subprocess.run(command, check=True)
 
 
 if __name__ == "__main__":

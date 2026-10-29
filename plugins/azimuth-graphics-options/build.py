@@ -1,6 +1,7 @@
 """Build the Azimuth Graphics Options plugin for Forza Horizon 2 Extra Options.
 
-Usage: py build.py [--zig <zig.exe>] [--output out] [--test] [test options]
+Usage: py plugins/azimuth-graphics-options/build.py [--zig <zig.exe>] [--output out] [--test] [test options]
+(the top-level build.py runs it with --output out/build/azimuth-graphics-options)
 
 Writes:
   <output>/mods/Azimuth Graphics Options/mod.json
@@ -14,13 +15,15 @@ Zig 0.15.2: --zig, else the ZIG environment variable, else zig on PATH.
 """
 
 import argparse
-import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1] / "common"))
+import build_common as bc  # noqa: E402
+
 SRC = HERE / "src"
 MOD_NAME = "Azimuth Graphics Options"
 DLL_NAME = "AzimuthGraphicsOptions.dll"
@@ -28,20 +31,7 @@ INI_NAME = "AzimuthGraphicsOptions.ini"
 PLUGIN = ["common.cpp", "rows.cpp", "language.cpp", "live.cpp", "call_chain.cpp", "settings_pages.cpp", "plugin.cpp"]
 
 
-def find_zig(given):
-    for candidate in (given, os.environ.get("ZIG"), shutil.which("zig")):
-        if candidate and Path(candidate).is_file():
-            return Path(candidate).resolve()
-    sys.exit("zig not found: pass --zig <zig.exe> (Zig 0.15.2) or set ZIG")
-
-
-def run(command):
-    print("zig", *[Path(str(part)).name if str(part).endswith((".cpp", ".exe", ".dll")) else str(part)
-                   for part in command[1:]])
-    subprocess.run([str(part) for part in command], check=True)
-
-
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--zig", help="zig.exe (0.15.2)")
     parser.add_argument("--output", type=Path, default=HERE / "out")
@@ -52,8 +42,8 @@ def main():
     parser.add_argument("--eo-release", type=Path, help="tests: the Extra Options 0.4.4 release folder (winmm.dll)")
     parser.add_argument("--eo-source", type=Path, help="tests: the Extra Options 0.4.4 source tree")
     parser.add_argument("--upstream", type=Path, help="tests: an Extra Options git clone (origin/main)")
-    options = parser.parse_args()
-    zig = find_zig(options.zig)
+    options = parser.parse_args(argv)
+    zig = bc.find_zig(options.zig)
     output = options.output.resolve()
     build = output / "obj"
     mod = output / "mods" / MOD_NAME
@@ -63,13 +53,13 @@ def main():
         folder.mkdir(parents=True, exist_ok=True)
 
     common = [zig, "c++", "-target", "x86_64-windows-gnu", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
-              "-DUNICODE", "-D_UNICODE", "-fno-sanitize=all"]
+              "-DUNICODE", "-D_UNICODE", "-fno-sanitize=all", "-I", bc.INCLUDE]
     sources = [SRC / name for name in PLUGIN]
-    run([*common, "-shared", "-s", *sources, "-luser32", "-Wl,--out-implib," + str(build / "plugin.lib"),
-         "-o", plugins / DLL_NAME])
-    run([*common, "-shared", "-s", "-DAZG_TEST_EXPORTS", *sources, "-luser32",
-         "-Wl,--out-implib," + str(build / "plugin-test.lib"), "-o", tests / "AzimuthGraphicsOptionsTest.dll"])
-    run([*common, "-municode", "-s", HERE / "tests" / "plugin_test.cpp", "-o", tests / "plugin_test.exe"])
+    bc.run([*common, "-shared", "-s", *sources, "-luser32", "-Wl,--out-implib," + str(build / "plugin.lib"),
+            "-o", plugins / DLL_NAME])
+    bc.run([*common, "-shared", "-s", "-DAZG_TEST_EXPORTS", *sources, "-luser32",
+            "-Wl,--out-implib," + str(build / "plugin-test.lib"), "-o", tests / "AzimuthGraphicsOptionsTest.dll"])
+    bc.run([*common, "-municode", "-s", HERE / "tests" / "plugin_test.cpp", "-o", tests / "plugin_test.exe"])
     for folder in (plugins, tests):
         for stale in folder.glob("*.lib"):
             stale.unlink()

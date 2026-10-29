@@ -37,7 +37,7 @@
 #include <string>
 #include <vector>
 
-#include "../src/fh2_plugin.h"
+#include "fh2_plugin.h"
 
 namespace {
 
