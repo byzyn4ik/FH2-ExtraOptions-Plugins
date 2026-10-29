@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "support.h"
 
+#include "fh2_guard.h"  // common/include
+
 void memory_copy(void *output, const void *input, size_t size) {
     unsigned char *to = output;
     const unsigned char *from = input;
@@ -85,7 +87,6 @@ int wide_append(wchar_t *output, size_t capacity, const wchar_t *text) {
 }
 
 int memory_read(const void *address, void *output, size_t size) {
-    SIZE_T read = 0;
     if (!address || !output || size > UINTPTR_MAX - (uintptr_t)address) {
         return 0;
     }
@@ -93,7 +94,7 @@ int memory_read(const void *address, void *output, size_t size) {
         return 1;
     }
     // No exception on unmapped memory, unlike a plain copy.
-    return ReadProcessMemory(GetCurrentProcess(), address, output, size, &read) && read == size;
+    return fh2_safe_read(address, output, size);
 }
 
 int memory_is_writable(const void *address, size_t size) {
@@ -122,11 +123,7 @@ int memory_is_writable(const void *address, size_t size) {
 }
 
 int memory_is_code(const void *address) {
-    MEMORY_BASIC_INFORMATION info;
-    const DWORD executable =
-        PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    return address && VirtualQuery(address, &info, sizeof(info)) == sizeof(info) &&
-           info.State == MEM_COMMIT && (info.Protect & executable) && !(info.Protect & PAGE_GUARD);
+    return fh2_is_code(address);
 }
 
 // ------------------------------------------------------------------ log

@@ -55,6 +55,9 @@ def main(argv=None):
     common = [zig, "c++", "-target", "x86_64-windows-gnu", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
               "-DUNICODE", "-D_UNICODE", "-fno-sanitize=all", "-I", bc.INCLUDE]
     sources = [SRC / name for name in PLUGIN]
+    sources.append(bc.version_rc(build / "version.rc", bc.mod_version(HERE / "mod" / "mod.json"), DLL_NAME,
+                                 "Azimuth Graphics Options (Extra Options plugin)",
+                                 "Azimuth Graphics Options for Forza Horizon 2"))
     bc.run([*common, "-shared", "-s", *sources, "-luser32", "-Wl,--out-implib," + str(build / "plugin.lib"),
             "-o", plugins / DLL_NAME])
     bc.run([*common, "-shared", "-s", "-DAZG_TEST_EXPORTS", *sources, "-luser32",

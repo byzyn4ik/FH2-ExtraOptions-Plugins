@@ -16,6 +16,7 @@
 #include <string>
 
 #include "common.h"
+#include "fh2_game.h"
 #include "fh2_plugin.h"
 #include "language.h"
 #include "live.h"
@@ -101,8 +102,8 @@ PLUGIN_EXPORT BOOL WINAPI FH2PluginInitialize(const FH2PluginContext *context) {
         return FALSE;
     }
     std::wstring dll = context->plugin_path;
-    size_t dot = dll.find_last_of(L'.');
-    ini_path = (dot == std::wstring::npos ? dll : dll.substr(0, dot)) + L".ini";
+    std::wstring ini(dll.size() + 5, L' ');
+    ini_path = fh2_plugin_ini_path(dll.c_str(), &ini[0], ini.size()) ? ini.c_str() : dll + L".ini";
     set_log(context->log_utf8,
             ini_flag(L"Logging", L"Enabled", true) ? folder_of(dll) + L"\\AzimuthGraphicsOptions.log" : std::wstring());
     bool video = ini_flag(L"Graphics", L"Enabled", true), audio = ini_flag(L"Audio", L"Enabled", true);

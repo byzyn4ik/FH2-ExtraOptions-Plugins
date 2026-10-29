@@ -2,18 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "language.h"
 
-#include <cstring>
-
 #include "common.h"
+#include "fh2_game.h"
 
 namespace azg {
 namespace language {
 
 namespace {
-
-// The game's text table manager; its language code is a std::string at +0x30
-// (the same read Extra Options and its Weather Control plugin use).
-constexpr uint32_t kTextTables = 0x3662990u;
 
 Choice forced = kAuto;
 bool pack;
@@ -70,22 +65,8 @@ void configure(Choice choice, const std::wstring &launcher, const std::wstring &
 bool ukrainian_pack() { return pack; }
 
 std::string game_code(const unsigned char *game) {
-    void *manager = nullptr;
-    unsigned char text[32];
-    if (!game || !safe_read(game + kTextTables, &manager, sizeof(manager)) || !manager ||
-        !safe_read((unsigned char *)manager + 0x30, text, sizeof(text)))
-        return std::string();
-    size_t length, capacity;
-    memcpy(&length, text + 16, sizeof(length));
-    memcpy(&capacity, text + 24, sizeof(capacity));
-    // An inline (short) std::string of 2 or 3 letters.
-    if (capacity != 15 || length < 2 || length > 3 || text[length] != 0) return std::string();
-    std::string code((const char *)text, length);
-    for (char &c : code) {
-        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) return std::string();
-        if (c >= 'a') c = (char)(c - 'a' + 'A');
-    }
-    return code;
+    char code[4];
+    return std::string(code, fh2_game_language(game, code));
 }
 
 Language current(const unsigned char *game) {

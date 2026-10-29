@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "fh2_guard.h"  // common/include: guarded reads, chained hooks
+
 #ifndef EXIT_GAME_VERSION
 #define EXIT_GAME_VERSION "0.0.0"  // build.py passes mod/mod.json's version
 #endif
@@ -33,4 +35,3 @@ const char *hooks_check(const unsigned char *game, uint32_t size, const char **i
 // 0 (logged) when it cannot.
 int hooks_install(unsigned char *game);
 
-int safe_read(const void *address, void *output, size_t size);

@@ -4,6 +4,8 @@
 
 #include <cstring>
 
+#include "fh2_guard.h"
+
 namespace azg {
 
 namespace {
@@ -20,22 +22,13 @@ BOOL CALLBACK init_lock(PINIT_ONCE, PVOID, PVOID *) {
 
 } // namespace
 
-bool safe_read(const void *address, void *output, size_t size) {
-    SIZE_T got = 0;
-    return address && ReadProcessMemory(GetCurrentProcess(), address, output, size, &got) && got == size;
-}
+bool safe_read(const void *address, void *output, size_t size) { return fh2_safe_read(address, output, size) != 0; }
 
 bool bytes_equal(const void *address, const void *expected, size_t size) {
-    unsigned char actual[64];
-    return size <= sizeof(actual) && safe_read(address, actual, size) && !memcmp(actual, expected, size);
+    return fh2_bytes_equal(address, expected, size) != 0;
 }
 
-bool is_code(const void *address) {
-    MEMORY_BASIC_INFORMATION region;
-    if (!address || VirtualQuery(address, &region, sizeof(region)) != sizeof(region)) return false;
-    const DWORD executable = PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    return region.State == MEM_COMMIT && (region.Protect & executable) && !(region.Protect & PAGE_GUARD);
-}
+bool is_code(const void *address) { return fh2_is_code(address) != 0; }
 
 const char *find(const char *text, size_t length, const char *needle) {
     size_t n = strlen(needle);

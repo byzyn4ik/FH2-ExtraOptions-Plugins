@@ -128,25 +128,6 @@ static Natives test_natives;
 static int use_test_natives;
 #endif
 
-int safe_read(const void *address, void *output, size_t size) {
-    SIZE_T done = 0;
-    return address && ReadProcessMemory(GetCurrentProcess(), address, output, size, &done) && done == size;
-}
-
-static int bytes_equal(const void *address, const void *expected, size_t size) {
-    unsigned char copy[64];
-    return size <= sizeof(copy) && safe_read(address, copy, size) && !memcmp(copy, expected, size);
-}
-
-static int is_code(const void *address) {
-    MEMORY_BASIC_INFORMATION region;
-    if (!address || VirtualQuery(address, &region, sizeof(region)) != sizeof(region) || region.State != MEM_COMMIT)
-        return 0;
-    DWORD protect = region.Protect & 0xff;
-    return !(region.Protect & PAGE_GUARD) && (protect == PAGE_EXECUTE || protect == PAGE_EXECUTE_READ ||
-                                               protect == PAGE_EXECUTE_READWRITE || protect == PAGE_EXECUTE_WRITECOPY);
-}
-
 static int in_game(const unsigned char *game, const void *address) {
     return (const unsigned char *)address >= game && (const unsigned char *)address < game + IMAGE_SIZE;
 }
@@ -166,21 +147,13 @@ static void describe(const void *address, char *out, size_t size) {
     }
 }
 
-static void *call_target(const unsigned char *site) {
-    unsigned char code[5];
-    int32_t displacement;
-    if (!safe_read(site, code, sizeof(code)) || code[0] != 0xe8) return NULL;
-    memcpy(&displacement, code + 1, 4);
-    return (void *)(site + 5 + displacement);
-}
-
 // A slot holds the game's function or another module's hook (executable code
 // outside the game image).
 static int slot_ok(const unsigned char *game, uint32_t slot, uint32_t native, void **target) {
     void *value = NULL;
-    if (!safe_read(game + slot, &value, sizeof(value))) return 0;
+    if (!fh2_safe_read(game + slot, &value, sizeof(value))) return 0;
     *target = value;
-    return value == game + native || (!in_game(game, value) && is_code(value));
+    return value == game + native || (!in_game(game, value) && fh2_is_code(value));
 }
 
 const char *hooks_check(const unsigned char *game, uint32_t size, const char **init_target,
@@ -192,7 +165,7 @@ const char *hooks_check(const unsigned char *game, uint32_t size, const char **i
     if (!game || size != IMAGE_SIZE) return "the game image is not the supported size (0x3a18000)";
     for (unsigned i = 0; i < sizeof(expected_code) / sizeof(expected_code[0]); ++i) {
         const Code *code = &expected_code[i];
-        if (!bytes_equal(game + code->rva, code->bytes, code->length)) {
+        if (!fh2_bytes_equal(game + code->rva, code->bytes, code->length)) {
             snprintf(problem, sizeof(problem), "the game's %s at 0x%x is not as expected", code->name, code->rva);
             return problem;
         }
@@ -200,7 +173,7 @@ const char *hooks_check(const unsigned char *game, uint32_t size, const char **i
     // The Car Packs binding's name operand: lea rdx at +0x26, disp32 at +0x29.
     int32_t displacement;
     memcpy(&displacement, game + CAR_PACKS_BINDING + 0x29, 4);
-    if (!bytes_equal(game + CAR_PACKS_BINDING + 0x2d + displacement, car_packs_name, sizeof(car_packs_name)))
+    if (!fh2_bytes_equal(game + CAR_PACKS_BINDING + 0x2d + displacement, car_packs_name, sizeof(car_packs_name)))
         return "the Car Packs tile binding does not name PART_Button_CarPacks";
 
     void *init = NULL, *update = NULL;
@@ -215,24 +188,24 @@ const char *hooks_check(const unsigned char *game, uint32_t size, const char **i
         snprintf(init_text, sizeof(init_text), "a hook at %s (Extra Options' or another plugin's)", where);
     }
 
-    const unsigned char *called = call_target(game + RESOURCE_CALL);
+    const unsigned char *called = fh2_call_target(game + RESOURCE_CALL);
     if (!called) return "the XAML resource site 0x16ebb37 is not a call";
     if (called == game + GET_RESOURCE) {
-        if (!bytes_equal(called, reader_prologue, sizeof(reader_prologue)))
+        if (!fh2_bytes_equal(called, reader_prologue, sizeof(reader_prologue)))
             return "the game's resource reader at 0xaabec0 is not as expected";
         snprintf(resource_text, sizeof(resource_text), "the game's resource reader 0x%x", GET_RESOURCE);
     } else if (called == game + EXTRA_OPTIONS_THUNK) {
         unsigned char thunk[12];
         void *hook;
-        if (!safe_read(called, thunk, sizeof(thunk)) || thunk[0] != 0x48 || thunk[1] != 0xb8 || thunk[10] != 0xff ||
+        if (!fh2_safe_read(called, thunk, sizeof(thunk)) || thunk[0] != 0x48 || thunk[1] != 0xb8 || thunk[10] != 0xff ||
             thunk[11] != 0xe0)
             return "the XAML resource call goes to 0x13fe354, which is not Extra Options' thunk";
         memcpy(&hook, thunk + 2, sizeof(hook));
-        if (in_game(game, hook) || !is_code(hook)) return "Extra Options' resource thunk does not lead to its code";
+        if (in_game(game, hook) || !fh2_is_code(hook)) return "Extra Options' resource thunk does not lead to its code";
         describe(hook, where, sizeof(where));
         snprintf(resource_text, sizeof(resource_text), "Extra Options' resource thunk 0x%x -> %s", EXTRA_OPTIONS_THUNK,
                  where);
-    } else if (!in_game(game, called) && is_code(called)) {
+    } else if (!in_game(game, called) && fh2_is_code(called)) {
         describe(called, where, sizeof(where));
         snprintf(resource_text, sizeof(resource_text), "another module's hook at %s", where);
     } else {
@@ -246,73 +219,20 @@ const char *hooks_check(const unsigned char *game, uint32_t size, const char **i
 
 // ------------------------------------------------------------- chaining
 
-#define REACH 0x7ff00000ull  // a little under 2 GB
-
-static unsigned char *allocate_near(const unsigned char *around) {
-    SYSTEM_INFO system;
-    GetSystemInfo(&system);
-    uintptr_t granularity = system.dwAllocationGranularity;
-    uintptr_t center = (uintptr_t)around & ~(granularity - 1);
-    uintptr_t high = (uintptr_t)system.lpMaximumApplicationAddress;
-    for (uintptr_t step = granularity; step < REACH; step += granularity) {
-        for (int up = 0; up < 2; ++up) {
-            if (!up && center < step + granularity) continue;
-            uintptr_t at = up ? center + step : center - step;
-            if (up && at >= high) continue;
-            MEMORY_BASIC_INFORMATION region;
-            if (VirtualQuery((void *)at, &region, sizeof(region)) != sizeof(region) || region.State != MEM_FREE)
-                continue;
-            unsigned char *page = VirtualAlloc((void *)at, system.dwPageSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-            if (!page) continue;
-            intptr_t distance = (intptr_t)page - (intptr_t)around;
-            if (distance > -(intptr_t)REACH && distance < (intptr_t)REACH) return page;
-            VirtualFree(page, 0, MEM_RELEASE);
-        }
+// The shared chaining (common/include/fh2_guard.h, also used by Azimuth
+// Graphics Options on the same resource call), with this plugin's wording.
+static const char *chain_problem(Fh2ChainResult result) {
+    switch (result) {
+    case FH2_CHAINED: return NULL;
+    case FH2_NOT_CALL:
+    case FH2_TARGET_NOT_CODE: return "its target is not executable code";
+    case FH2_UNALIGNED: return "it is not 8-byte aligned";  // only the slot can be (hooks_check)
+    case FH2_NO_NEAR_MEMORY: return "no free memory within 2 GB of it";
+    case FH2_JUMP_FAILED: return "the jump could not be made executable";
+    case FH2_WRITE_FAILED: return "it could not be written";
+    case FH2_RACED: return "another module changed it at the same time";
     }
-    return NULL;
-}
-
-// Points "call rel32" at `site` to a jump to `handler`; *previous gets what it
-// called. Only the 4-byte aligned displacement changes (compare-exchange).
-static const char *chain_call(unsigned char *site, void *handler, void **previous) {
-    void *target = call_target(site);
-    if (!target || !is_code(target)) return "its target is not executable code";
-    unsigned char *jump = allocate_near(site);
-    if (!jump) return "no free memory within 2 GB of it";
-    unsigned char code[14] = {0xff, 0x25, 0, 0, 0, 0};  // jmp qword [rip+0]; dq handler
-    memcpy(code + 6, &handler, 8);
-    memcpy(jump, code, sizeof(code));
-    DWORD protection, ignored;
-    if (!VirtualProtect(jump, sizeof(code), PAGE_EXECUTE_READ, &protection)) {
-        VirtualFree(jump, 0, MEM_RELEASE);
-        return "the jump could not be made executable";
-    }
-    FlushInstructionCache(GetCurrentProcess(), jump, sizeof(code));
-    *previous = target;  // before the swap: the game may read a page on another thread
-    LONG before = (LONG)(int32_t)((unsigned char *)target - (site + 5));
-    LONG after = (LONG)(int32_t)(jump - (site + 5));
-    if (!VirtualProtect(site + 1, 4, PAGE_EXECUTE_READWRITE, &protection)) {
-        VirtualFree(jump, 0, MEM_RELEASE);
-        return "it could not be written";
-    }
-    LONG seen = InterlockedCompareExchange((volatile LONG *)(site + 1), after, before);
-    VirtualProtect(site + 1, 4, protection, &ignored);
-    FlushInstructionCache(GetCurrentProcess(), site, 5);
-    if (seen != before) {
-        VirtualFree(jump, 0, MEM_RELEASE);
-        return "another module changed it at the same time";
-    }
-    return NULL;
-}
-
-// Swaps an 8-byte function pointer slot from `expected` to `handler`.
-static const char *chain_slot(void **slot, void *expected, void *handler) {
-    DWORD protection, ignored;
-    if (((uintptr_t)slot & 7) != 0) return "it is not 8-byte aligned";
-    if (!VirtualProtect(slot, sizeof(void *), PAGE_READWRITE, &protection)) return "it could not be written";
-    void *seen = InterlockedCompareExchangePointer(slot, handler, expected);
-    VirtualProtect(slot, sizeof(void *), protection, &ignored);
-    return seen == expected ? NULL : "another module changed it at the same time";
+    return "?";
 }
 
 // --------------------------------------------------------------- handlers
@@ -403,7 +323,7 @@ int hooks_install(unsigned char *game) {
     void **slot = (void **)(game + PAUSE_INIT_SLOT);
     void *init = *slot;
     previous_init = (PageFunction)init;
-    const char *problem = chain_slot(slot, init, (void *)(uintptr_t)pause_init);
+    const char *problem = chain_problem(fh2_chain_slot(slot, init, (void *)(uintptr_t)pause_init));
     if (problem) {
         snprintf(line, sizeof(line), "the pause page init slot 0x%x could not be chained (%s); nothing is installed",
                  PAUSE_INIT_SLOT, problem);
@@ -411,7 +331,8 @@ int hooks_install(unsigned char *game) {
         return 0;
     }
     // previous_reader is set inside chain_call before the call is swapped.
-    problem = chain_call(game + RESOURCE_CALL, (void *)(uintptr_t)read_resource, (void **)&previous_reader);
+    problem = chain_problem(
+        fh2_chain_call(game + RESOURCE_CALL, (void *)(uintptr_t)read_resource, (void **)&previous_reader));
     if (problem) {
         // The init hook stays (another module may have chained it since); it binds nothing.
         snprintf(line, sizeof(line), "the XAML resource call 0x%x could not be chained (%s); no Exit Game tile",

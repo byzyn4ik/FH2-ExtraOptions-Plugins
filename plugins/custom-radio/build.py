@@ -80,6 +80,15 @@ def import_libraries(zig, build):
     return libraries
 
 
+def version_resource(zig, build):
+    """obj/version.res: the DLL's version resource, from mod/mod.json's version."""
+    rc = bc.version_rc(build / "version.rc", bc.mod_version(HERE / "mod" / "mod.json"), DLL_NAME,
+                       "Custom Radio (Extra Options plugin)", "Custom Radio for Forza Horizon 2")
+    res = build / "version.res"
+    bc.run([zig, "rc", "/nologo", "/fo", res, "--", rc])
+    return res
+
+
 def build_dll(zig, build, libraries, output, test):
     include = zig.parent / "lib"
     objects = []
@@ -115,7 +124,7 @@ def main(argv=None):
     plugins = mod / "plugins"
     for folder in (build, plugins):
         folder.mkdir(parents=True, exist_ok=True)
-    libraries = import_libraries(zig, build)
+    libraries = import_libraries(zig, build) + [version_resource(zig, build)]
     build_dll(zig, build, libraries, plugins / DLL_NAME, test=False)
     build_dll(zig, build, libraries, build / "CustomRadio-test.dll", test=True)
     shutil.copy2(HERE / "mod" / "mod.json", mod / "mod.json")

@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // An Extra Options mod-loader plugin (tools/PLUGIN_API.md of Extra Options):
-// FH2PluginInitialize reads CustomRadio.ini beside this DLL and installs the
-// station's hooks; FH2PluginVehicleUpdate (the local car's update, on the game
+// FH2PluginInitialize reads CustomRadio.ini beside this DLL (the DLL path with
+// its extension replaced) and installs the station's hooks;
+// FH2PluginVehicleUpdate (the local car's update, on the game
 // thread) reads the three keys while gameplay input is enabled and the game
 // window has focus.
+#include "fh2_game.h"    // common/include: <DLL path>.ini
 #include "fh2_plugin.h"
 #include "config.h"
 #include "radio.h"
@@ -28,26 +30,6 @@ static int game_focused(void) {
         GetWindowThreadProcessId(window, &process);
     }
     return process == GetCurrentProcessId();
-}
-
-// <folder of the DLL>\CustomRadio.ini: the DLL path with its extension replaced.
-static int ini_path_for(const wchar_t *plugin_path, wchar_t *output, size_t capacity) {
-    size_t length = wide_length(plugin_path), dot = length;
-    for (size_t i = length; i > 0; --i) {
-        if (plugin_path[i - 1] == L'.') {
-            dot = i - 1;
-            break;
-        }
-        if (plugin_path[i - 1] == L'\\' || plugin_path[i - 1] == L'/') {
-            break;
-        }
-    }
-    if (dot + 5 > capacity || dot == length) {
-        return 0;
-    }
-    memory_copy(output, plugin_path, dot * sizeof(wchar_t));
-    memory_copy(output + dot, L".ini", 5 * sizeof(wchar_t));
-    return 1;
 }
 
 // The folder of the game's launcher (Azimuth.exe): relative Folder= values start here.
@@ -98,7 +80,7 @@ __declspec(dllexport) BOOL WINAPI FH2PluginInitialize(const FH2PluginContext *co
     log_bind(context->log_utf8);
     log_append("CUSTOM RADIO " CUSTOM_RADIO_VERSION ": starting.\r\n");
     if (!context->game_image || context->game_image_size != GAME_IMAGE_SIZE || !context->plugin_path ||
-        !ini_path_for(context->plugin_path, ini, ARRAY_COUNT(ini))) {
+        !fh2_plugin_ini_path(context->plugin_path, ini, ARRAY_COUNT(ini))) {
         log_append("CUSTOM RADIO: unsupported game image or plugin path; nothing installed.\r\n");
         return FALSE;
     }
