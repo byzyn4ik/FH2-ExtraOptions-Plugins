@@ -73,13 +73,32 @@ static unsigned key_value(const char *text) {
     return 0;
 }
 
+// `folder`\FH2_ExtraOptions.ini, when that file exists; `levels` trailing
+// path parts of `from` are dropped first.
+static int beside(const wchar_t *from, unsigned levels, wchar_t *path, size_t capacity) {
+    size_t length = from ? wcslen(from) : 0;
+    if (!length || length >= capacity) return 0;
+    wcscpy(path, from);
+    for (unsigned i = 0; i < levels; ++i) {
+        wchar_t *slash = wcsrchr(path, L'\\');
+        if (!slash) return 0;
+        *slash = 0;
+    }
+    if (wcslen(path) + 22 >= capacity) return 0;
+    wcscat(path, L"\\FH2_ExtraOptions.ini");
+    return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+// Extra Options' folder: above mods\<mod>\plugins\KeyboardMouse.ini, else
+// beside the game's executable, else beside a winmm.dll of the process.
 static int default_path(wchar_t *path, size_t capacity) {
-    HMODULE module = GetModuleHandleW(L"winmm.dll");
-    DWORD length = GetModuleFileNameW(module ? module : NULL, path, (DWORD)capacity);
-    wchar_t *slash = length && length < capacity ? wcsrchr(path, L'\\') : NULL;
-    if (!slash || (size_t)(slash - path) + 22 >= capacity) return 0;
-    wcscpy(slash + 1, L"FH2_ExtraOptions.ini");
-    return 1;
+    wchar_t module[MAX_PATH * 2];
+    if (beside(kbm_ini_path(), 4, path, capacity)) return 1;
+    DWORD length = GetModuleFileNameW(NULL, module, ARRAY_COUNT(module));
+    if (length && length < ARRAY_COUNT(module) && beside(module, 1, path, capacity)) return 1;
+    HMODULE winmm = GetModuleHandleW(L"winmm.dll");
+    length = winmm ? GetModuleFileNameW(winmm, module, ARRAY_COUNT(module)) : 0;
+    return length && length < ARRAY_COUNT(module) && beside(module, 1, path, capacity);
 }
 
 void eo_bindings_load(const wchar_t *eo_ini) {
@@ -92,6 +111,12 @@ void eo_bindings_load(const wchar_t *eo_ini) {
         have = default_path(path, ARRAY_COUNT(path));
     }
     int exists = have && GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
+    if (!eo_ini) {
+        if (exists)
+            log_line("KBM: Extra Options' keyboard bindings read from %ls.", path);
+        else
+            log_append("KBM: FH2_ExtraOptions.ini not found; Extra Options' default keyboard bindings assumed.\r\n");
+    }
     for (unsigned i = 0; i < ARRAY_COUNT(actions); ++i) {
         keys[i] = actions[i].key;  // Extra Options' default (its INI ships Headlights F3, Roof F4)
         if (!exists) continue;

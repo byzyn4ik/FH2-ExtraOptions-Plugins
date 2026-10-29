@@ -550,6 +550,11 @@ def capstone_view(pe, rva, count):
 
 def test_hosts(output, dll, zips):
     print("hosts")
+    out = (ctypes.c_uint * 7)()
+    reserved = kernel32.VirtualAlloc(None, 0x10000, 0x2000, 0x04)  # reserved, not committed: reading faults
+    check(reserved and dll.KbmTestHostSites(reserved, out) == 0,
+          "an image that cannot be read is refused (the fault is caught, nothing crashes)")
+    kernel32.VirtualFree(reserved, 0, 0x8000)
     executables = {}
     for version, path in zips.items():
         if not path or not path.is_file():
@@ -1471,9 +1476,12 @@ def test_plugin(output, pe, hosts, hub_native, video, eo_page):
         unmap(base)
         unmap(host)
 
-    def scenario(label, ini_text, adapter=1, host_change=None, dll_path=None, expect=""):
+    def scenario(label, ini_text, adapter=1, host_change=None, dll_path=None, expect="", eo_ini=None):
         dll = ctypes.CDLL(str(dll_path)) if dll_path else fresh_dll(output, label.replace(" ", "-").replace("=", ""))
-        plugin = Plugin(dll, work / label.replace(" ", "-").replace("=", ""), ini_text)
+        folder = work / label.replace(" ", "-").replace("=", "")
+        plugin = Plugin(dll, folder, ini_text)
+        if eo_ini is not None:
+            (folder / "FH2_ExtraOptions.ini").write_text(eo_ini, encoding="utf-8")
         base = pe.map()
         host = host_pe.map()
         if not dll_path:
@@ -1517,6 +1525,11 @@ def test_plugin(output, pe, hosts, hub_native, video, eo_page):
                                        expect="Mode=PAD; the gamepad path is untouched")
     check(ready == 1 and "entry" not in changed and "Settings hub init" in changed and "XAML resource call" in changed,
           f"Mode=PAD: no input hook, but the tile and page (to switch back) ({changed})")
+    ready, changed, said, _ = scenario("eo clash", "[KeyboardMouse]\nThrottle=F3\nTabRight=F4\n",
+                                       eo_ini="[Bindings]\nHeadlightsKeyboard=F3\nRoofKeyboard=None\n",
+                                       expect="KBM: warning: Throttle=F3 is also Extra Options' HeadlightsKeyboard")
+    check(ready == 1 and said and "entry" in changed,
+          "a key of ours that Extra Options' FH2_ExtraOptions.ini (found above the mods folder) also binds is warned about")
     shipping = output / "mods" / MOD_NAME / "plugins" / DLL_NAME
     ready, changed, said, dll = scenario("shipping", shipped, dll_path=shipping,
                                          expect="the host is not Azimuth 1.0.4 or 1.0.2")
