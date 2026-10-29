@@ -151,15 +151,19 @@ built with `-Wall -Wextra -Werror`; no Visual Studio needed). Like Extra
 Options' own plugins, the DLL has no C runtime of its own: it links import
 libraries made from Windows' `kernel32`, `user32` and `msvcrt`.
 
+From the repository's root:
+
 ```text
-py build.py --zig <zig-x86_64-windows-0.15.2>\zig.exe --test
+py build.py --zig <zig-x86_64-windows-0.15.2>\zig.exe --plugin custom-radio --test
 ```
 
-Output in `out\`: `mods\Custom Radio\` (the mod to install) and
-`obj\CustomRadio-test.dll` (the same code with test exports). `--test` runs
-the offline tests. CI (GitHub Actions) builds and tests every push and pull
-request and keeps the mod folder as an artifact; a `v*` tag publishes it as a
-release ZIP.
+Output in `out\`: `mods\Custom Radio\` (the mod to install),
+`release\custom-radio-<version>.zip` and
+`build\custom-radio\obj\CustomRadio-test.dll` (the same code with test
+exports). `--test` runs the offline tests, with the game executable and Extra
+Options 0.4.4's release from below `--game` (default `%USERPROFILE%\FH2`) when
+they are there. CI (GitHub Actions) builds and tests every push and pull
+request; a `v*` tag publishes the release ZIPs.
 
 ## Testing
 
@@ -192,6 +196,6 @@ without the game:
 
 ## License
 
-GPL-3.0 (see `LICENSE`). The station code comes from Forza Horizon 2 Extra
-Options (the custom radio pull request) and `src\fh2_plugin.h` from Extra
-Options itself, both GPL-3.0.
+GPL-3.0 (see `LICENSE` at the repository's root). The station code comes from
+Forza Horizon 2 Extra Options (the custom radio pull request) and
+`common\include\fh2_plugin.h` from Extra Options itself, both GPL-3.0.

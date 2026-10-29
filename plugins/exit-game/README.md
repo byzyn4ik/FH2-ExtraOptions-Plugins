@@ -109,12 +109,16 @@ installed, the game is left as it is and the log says why.
 
 ## Build and test
 
+From the repository's root:
+
 ```text
-py build.py --zig <zig 0.15.2>\zig.exe --test
+py build.py --zig <zig 0.15.2>\zig.exe --plugin exit-game --test
 ```
 
-writes `out\mods\Exit Game\...` and a test build of the DLL with extra entry
-points (`out\tests\ExitGameTest.dll`), then runs `tests\run_tests.py`. The
+writes `out\mods\Exit Game\...`, `out\release\exit-game-<version>.zip` and a
+test build of the DLL with extra entry points
+(`out\build\exit-game\tests\ExitGameTest.dll`), then runs
+`tests\run_tests.py`. The
 tests never run the game and only read its files (`--game`, default
 `%USERPROFILE%\FH2`): the game executable (mapped and patched in the test's
 own memory) and `UI.zip`, Azimuth's release ZIP (`--azimuth`), the Extra
@@ -124,4 +128,4 @@ tests that need them.
 
 ## License
 
-GPL-3.0-or-later, as Extra Options. See `LICENSE`.
+GPL-3.0-or-later, as Extra Options. See `LICENSE` at the repository's root.

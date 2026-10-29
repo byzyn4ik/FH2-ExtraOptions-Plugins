@@ -157,13 +157,18 @@ that live part) is installed and the log says why.
 
 ## Build and test
 
+From the repository's root:
+
 ```text
-py build.py --zig <zig 0.15.2>\zig.exe --test
+py build.py --zig <zig 0.15.2>\zig.exe --plugin azimuth-graphics-options --test
 ```
 
-writes `out\mods\Azimuth Graphics Options\...`, a test build of the DLL with
-extra entry points (`out\tests\AzimuthGraphicsOptionsTest.dll`) and
-`out\tests\plugin_test.exe`, then runs `tests\run_tests.py`. The tests never run
+writes `out\mods\Azimuth Graphics Options\...`,
+`out\release\azimuth-graphics-options-<version>.zip`, a test build of the DLL
+with extra entry points and `plugin_test.exe` (in
+`out\build\azimuth-graphics-options\tests\`), then runs `tests\run_tests.py`.
+`py plugins\azimuth-graphics-options\build.py --output <folder> --test` builds
+and tests this plugin alone. The tests never run
 the game and only read its files (`--game`, default `%USERPROFILE%\FH2`):
 the game executable and `UI.zip`, Azimuth's release ZIPs (`--azimuth` for
 1.0.4, `--azimuth102`), a copy of `data\azimuth.ini`, Extra Options 0.4.4's
@@ -171,11 +176,11 @@ release (`--eo-release`, its `winmm.dll`) and source (`--eo-source`), and an
 Extra Options git clone (`--upstream`, refs `origin/main` and `combined-10`).
 Missing inputs skip the tests that need them.
 
-Every push builds and tests the plugin on GitHub Actions
+Every push builds and tests every plugin of the repository on GitHub Actions
 (`.github/workflows/build.yml`, Zig 0.15.2 checked by SHA-256); a pushed tag
-`v*` also publishes a release with the mod folder zipped.
+`v*` also publishes a release with each plugin's ZIP.
 
 ## License
 
-GPL-3.0-or-later (see `LICENSE`). `src\fh2_plugin.h` is Extra Options' plugin
-API header, unchanged.
+GPL-3.0-or-later (see `LICENSE` at the repository's root).
+`common\include\fh2_plugin.h` is Extra Options' plugin API header, unchanged.
