@@ -24,6 +24,7 @@ Nothing is installed. Zig 0.15.2: --zig, else ZIG, else zig on PATH.
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -59,7 +60,8 @@ def run_counted(command, label):
     counts = {"ok": 0, "FAIL": 0, "skip": 0}
     print(f"== {label}", flush=True)
     process = subprocess.Popen([str(part) for part in command], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               text=True, encoding="utf-8", errors="replace")
+                               text=True, encoding="utf-8", errors="replace",
+                               env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"})
     for line in process.stdout:
         print(line, end="", flush=True)
         match = RESULT.match(line)
@@ -78,6 +80,7 @@ def zip_folder(archive, folder, prefix):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--zig", help="zig.exe (0.15.2)")
     parser.add_argument("--plugin", action="append", default=[], metavar="ID", help="build this plugin (repeatable)")
