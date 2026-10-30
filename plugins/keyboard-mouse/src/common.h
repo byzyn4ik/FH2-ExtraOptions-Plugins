@@ -22,7 +22,6 @@
 // build Extra Options supports.
 #define GAME_IMAGE_SIZE 0x3a18000u
 enum {
-    GAME_RVA_TEXT_TABLES = 0x3662990,   // text manager; its language code at +0x30
     GAME_RVA_PLAYER_MANAGER = 0x34aba60,
     GAME_RVA_UI_MANAGER = 0x36e0ae8,
     GAME_RVA_CREATE_PIXEL_BUFFER = 0x165e600,

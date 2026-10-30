@@ -21,6 +21,7 @@
 #include "common.h"
 #include "controller_pause.h"
 #include "eo_bindings.h"
+#include "fh2_game.h"
 #include "fh2_plugin.h"
 #include "host.h"
 #include "kbm_input.h"
@@ -36,15 +37,9 @@
 static wchar_t ini_path[PATH_CAPACITY];
 static PluginSettings settings;
 
+// KeyboardMouse.ini beside the DLL (common/include/fh2_game.h).
 static int make_ini_path(const wchar_t *plugin_path) {
-    size_t length = wcslen(plugin_path);
-    const wchar_t *dot = wcsrchr(plugin_path, L'.');
-    const wchar_t *slash = wcsrchr(plugin_path, L'\\');
-    if (dot && (!slash || dot > slash)) length = (size_t)(dot - plugin_path);
-    if (length + 5 > ARRAY_COUNT(ini_path)) return 0;
-    memcpy(ini_path, plugin_path, length * sizeof(wchar_t));
-    memcpy(ini_path + length, L".ini", 5 * sizeof(wchar_t));
-    return 1;
+    return fh2_plugin_ini_path(plugin_path, ini_path, ARRAY_COUNT(ini_path));
 }
 
 static void keep_loaded(void) {

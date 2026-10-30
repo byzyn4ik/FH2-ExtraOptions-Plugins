@@ -13,8 +13,10 @@
 //     its handler; the site is pointed at a jump placed within 2 GB of it
 //     ("jmp [rip+0]; dq handler") by swapping only its 4-byte, 4-aligned
 //     displacement (compare-exchange), so plugins that chain the same site
-//     (Azimuth Graphics Options and Exit Game both chain the XAML resource
-//     call at game+0x16ebb37) stack in any load order;
+//     stack in any load order (Azimuth Graphics Options, Exit Game and
+//     Performance chain the XAML resource call at game+0x16ebb37 with it;
+//     Keyboard & Mouse chains the same call through a near jump of its own,
+//     written by its own patch code with the other threads suspended);
 //   - fh2_chain_slot: the same for an 8-byte function pointer (vtable slot).
 #ifndef FH2_GUARD_H
 #define FH2_GUARD_H

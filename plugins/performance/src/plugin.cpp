@@ -17,6 +17,7 @@
 
 #include "attach.h"
 #include "common.h"
+#include "fh2_game.h"
 #include "fh2_plugin.h"
 #include "monitor.h"
 #include "video_row.h"
@@ -68,9 +69,8 @@ PLUGIN_EXPORT BOOL WINAPI FH2PluginInitialize(const FH2PluginContext *context) {
         return FALSE;
     }
     std::wstring dll = context->plugin_path;
-    size_t dot = dll.find_last_of(L'.');
-    std::wstring ini = (dot == std::wstring::npos || dot < dll.find_last_of(L"\\/") + 1 ? dll : dll.substr(0, dot)) +
-                       L".ini";
+    std::wstring buffer(dll.size() + 5, L' ');
+    std::wstring ini = fh2_plugin_ini_path(dll.c_str(), &buffer[0], buffer.size()) ? buffer.c_str() : dll + L".ini";
     std::string warnings;
     options = read_options(ini, folder_of(dll), &warnings);
     say("plugin " PERFORMANCE_VERSION " for Extra Options " +

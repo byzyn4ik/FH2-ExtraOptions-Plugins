@@ -5,7 +5,9 @@
 // target (the game's function, Extra Options' thunk or another module's hook)
 // is kept and called by the new handler. The site is pointed at a small jump
 // placed within 2 GB of it ("jmp [rip+0]; dq handler"); only the 4-byte,
-// 4-aligned displacement is swapped, atomically.
+// 4-aligned displacement is swapped, atomically. The work is
+// common/include/fh2_guard.h's fh2_chain_call, shared with the other plugins
+// that chain the same XAML resource call.
 #pragma once
 #include <cstdint>
 
