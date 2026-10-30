@@ -13,6 +13,8 @@ together in any combination and load order.
 | [Custom Radio](plugins/custom-radio/README.md) | Your own MP3s (a `Music` folder beside `Azimuth.exe`) as one more station of the game's car radio | `CustomRadio.ini` | F9 tunes in, F7 next track, F6 restart / previous (keyboard or Xbox buttons, set in the INI) | Azimuth 1.0.4, Extra Options 0.4.4 |
 | [Performance](plugins/performance/README.md) | An FPS counter in the top-right corner (FPS, GPU load, video memory; **Detailed** adds frame times, the 1% low and the GPU frame time), an **FPS counter** row (Off / On / Detailed) on the game's **Video** page and an optional performance log (CSV) | `Performance.ini` | none (Video page row, INI) | Azimuth 1.0.4 (D3D12), Extra Options 0.4.4 |
 | [Keyboard & Mouse](plugins/keyboard-mouse/README.md) | Keyboard and mouse without a virtual controller: rebindable keys for driving and menus, mouse look, a menu pointer, key prompts, and a **KEYBOARD & MOUSE** page from a tile on the pause menu's Settings hub | `KeyboardMouse.ini` | WASD drive, Space handbrake, E/Q gears, Tab camera, R rewind, M map, P photo mode, Esc pause / back, Enter confirm, arrows in menus (all rebindable; see [Keyboard keys](#keyboard-keys)) | Azimuth 1.0.4 (or 1.0.2), Extra Options 0.4.4 |
+| [Photo Export](plugins/photo-export/README.md) | Every photo taken in the game, copied once as a JPG file into `Documents\My Games\Forza Horizon 2\Photos` (or a folder you set); the saves are only read | `PhotoExport.ini` | none | Azimuth 1.0.4 (1.0.1 to 1.0.3 too), Extra Options 0.4.4 |
+| [Saves in Documents (mirror)](plugins/documents-saves/README.md) | A verified copy (SHA-256) of every save in `Documents\My Games\Forza Horizon 2\Saves\1A96545B`, a few seconds after the game writes it. A mirror, not a move: the game keeps its saves in Azimuth's folder, which the plugin only reads; nothing is deleted | `DocumentsSaves.ini` | none | Azimuth 1.0.4 (1.0.1 to 1.0.3 too), Extra Options 0.4.4 |
 
 Use a clean Extra Options 0.4.4 release (`FH2_Extra_Options_0.4.4-azimuth.zip`)
 on Azimuth 1.0.4. A plugin that finds the game, Azimuth or Extra Options other
@@ -76,6 +78,12 @@ directly and are not affected by any plugin.
        Keyboard & Mouse\
          mod.json
          plugins\KeyboardMouse.dll, KeyboardMouse.ini
+       Photo Export\
+         mod.json
+         plugins\PhotoExport.dll, PhotoExport.ini
+       Saves in Documents (mirror)\
+         mod.json
+         plugins\DocumentsSaves.dll, DocumentsSaves.ini
    ```
 
 4. Start the game. Each plugin logs what it did in `FH2_ExtraOptions.log`.
@@ -93,7 +101,12 @@ common/
   include/fh2_guard.h    guarded reads, executable-code check, call targets,
                          near jump allocation, call and vtable-slot chaining
   include/fh2_game.h     the game's text language, the plugin's INI path
+  include/fh2_saves.h    Azimuth's save layout (commit markers, revisions), SHA-256,
+                         the Documents folder, the Azimuth build (Photo Export,
+                         Saves in Documents)
   build_common.py        Zig lookup, command runner, generated files, version resource
+  saves_testing.py       fake save trees in Azimuth 1.0.4's layout and the
+                         azimuth.exe 1.0.4 facts the save plugins rely on (tests)
 plugins/<id>/            one plugin: build.py, mod/ (mod.json, INI), src/, tests/, README.md
 tests/                   all plugins together (run_combined.py, combined_test.cpp)
 .github/workflows/       CI: build and test every push; release on a v* tag
@@ -152,7 +165,10 @@ that they stack into one chain and that:
 - Custom Radio installs beside the others.
 
 Performance's DXGI/D3D12 hooks are tested by its own `d3d12_test.exe` (on
-the GPU when there is one), not in the combined test.
+the GPU when there is one), not in the combined test. Photo Export and Saves
+in Documents hook nothing in the game or in Azimuth (each runs one thread that
+reads the saves folder), so they are tested on their own, on save trees in a
+temporary folder.
 
 ### Adding a plugin
 
