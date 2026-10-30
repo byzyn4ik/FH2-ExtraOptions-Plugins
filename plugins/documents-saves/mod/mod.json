@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "id": "documents-saves",
+  "name": "Saves in Documents (mirror)",
+  "author": "Max Petrovsky (byzyn4ik)",
+  "version": "1.0.0",
+  "description": "A verified copy of every Forza Horizon 2 save in Documents\\My Games\\Forza Horizon 2\\Saves\\1A96545B. The game keeps using Azimuth's own saves folder; the plugin only reads it and never deletes anything.",
+  "dependencies": []
+}
