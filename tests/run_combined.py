@@ -1,25 +1,35 @@
-"""All plugins together: Azimuth Graphics Options, Exit Game and Custom Radio in one process.
+"""All plugins together: Azimuth Graphics Options, Exit Game, Custom Radio, Performance and Keyboard & Mouse.
 
-Usage: py tests/run_combined.py [--zig zig.exe] [--output out] [--game <FH2 folder>]
+Usage: py tests/run_combined.py [--zig zig.exe] [--output out] [--game <FH2 folder>] [--orders all|cover]
 
 Needs the plugins built by build.py (their test builds under <output>/build/<id>)
 and, below --game (default ~/FH2), the game executable and media/UI.zip and
 Azimuth 1.0.4's release ZIP; without them every check skips (as on CI).
 Nothing is installed and the game is never run: the game executable and
 azimuth.exe are mapped into a test process (tests/combined_test.cpp, built
-here) once per install order of the three plugins (all 6) and per state of
-the XAML resource call at 0x16ebb37 (the game's reader; Extra Options 0.4.4's
-thunk). Graphics and Exit Game both chain that call: each run checks that
-they chain onto each other in either order, that Custom Radio installs beside
-them, and that the Video and Audio pages (Graphics' rows) and the pause page
-(Exit Game's tile) come out right, using each plugin's own page checks from
-its tests/run_tests.py.
+here) once per install order of the five plugins and per state of the XAML
+resource call at 0x16ebb37 (the game's reader; Extra Options 0.4.4's thunk,
+with its Video page reset).
+
+Graphics, Exit Game, Performance and Keyboard & Mouse all chain that call;
+Custom Radio hooks elsewhere. --orders all (the default) runs all 120 install
+orders; --orders cover runs the 24 orders of the four plugins that chain the
+call, with Custom Radio put in each of the five places in turn. Each run
+checks that the four chain onto each other in that order, that Radio installs
+beside them, and that the Video page (Graphics' rows and Performance's FPS
+counter row, once each), the Audio page, the pause page (Exit Game's tile),
+the Settings hub (Keyboard & Mouse's tile), the standalone KEYBOARD & MOUSE
+page (no rows of the others), the Video page reset and the pause page init
+come out right, using each plugin's own page checks from its
+tests/run_tests.py. Performance's DXGI/D3D12 part is not started here
+(ShowFps=0, PerfLog=0; its own tests run it).
 """
 
 import argparse
 import importlib.util
 import itertools
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -33,12 +43,15 @@ import build_common as bc  # noqa: E402
 GAME_EXE = Path("Anthem_1.0.0.64_x64__8wekyb3d8bbwe/Mount/forza_durango_release_final.exe")
 UI_ZIP = Path("Anthem_1.0.0.64_x64__8wekyb3d8bbwe/Mount/media/UI.zip")
 PAGES = {"video": "Scenes/Anthem/A_VideoOptions.xaml", "audio": "Scenes/Anthem/A_AudioOptions.xaml",
-         "pause": "Scenes/Anthem/A_PauseMenu.xaml"}
+         "pause": "Scenes/Anthem/A_PauseMenu.xaml", "hub": "Scenes/Anthem/A_PauseOptions.xaml"}
 # id, letter, mod folder, DLL name in the mod, its test build (below <output>/build/<id>)
 PLUGINS = [("azimuth-graphics-options", "g", "Azimuth Graphics Options", "AzimuthGraphicsOptions.dll",
             "tests/AzimuthGraphicsOptionsTest.dll"),
            ("exit-game", "e", "Exit Game", "ExitGame.dll", "tests/ExitGameTest.dll"),
-           ("custom-radio", "r", "Custom Radio", "CustomRadio.dll", "obj/CustomRadio-test.dll")]
+           ("custom-radio", "r", "Custom Radio", "CustomRadio.dll", "obj/CustomRadio-test.dll"),
+           ("performance", "p", "Performance", "Performance.dll", "tests/PerformanceTest.dll"),
+           ("keyboard-mouse", "k", "Keyboard & Mouse", "KeyboardMouse.dll", "tests/KeyboardMouseTest.dll")]
+PAGE_PLUGINS = "gepk"  # the plugins that chain the XAML resource call
 
 failures = []
 
@@ -62,6 +75,17 @@ def plugin_tests(plugin_id):
     return module
 
 
+def install_orders(which):
+    """All 120 install orders, or every order of the page plugins with Radio in each place in turn."""
+    if which == "all":
+        return ["".join(p) for p in itertools.permutations("gerpk")]
+    chosen = []
+    for index, page_order in enumerate(itertools.permutations(PAGE_PLUGINS)):
+        place = index % 5
+        chosen.append("".join(page_order[:place]) + "r" + "".join(page_order[place:]))
+    return chosen
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -69,6 +93,7 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "out")
     parser.add_argument("--game", type=Path, default=Path.home() / "FH2")
     parser.add_argument("--azimuth", type=Path, help="Azimuth 1.0.4's release ZIP (default <game>/azimuth-windows-1.0.4.zip)")
+    parser.add_argument("--orders", choices=("all", "cover"), default="all", help="install orders to run (default all)")
     options = parser.parse_args()
     output = options.output.resolve()
     game_exe, ui_zip = options.game / GAME_EXE, options.game / UI_ZIP
@@ -97,11 +122,16 @@ def main():
         for name, entry in PAGES.items():
             pages[name] = archive.read(entry)
             (build / f"{name}.xaml").write_bytes(pages[name])
-    graphics, exit_game, radio = (plugin_tests(i) for i, *_ in PLUGINS)
+    graphics, exit_game, radio, performance, keyboard = (plugin_tests(i) for i, *_ in PLUGINS)
+    modules = (graphics, exit_game, performance, keyboard)
     music = runs / "Music"
     radio.write_music(music)
+    keyboard_ini = (ROOT / "plugins" / "keyboard-mouse" / "mod" / "KeyboardMouse.ini").read_text(encoding="utf-8")
 
-    for variant, order in itertools.product(("stock", "eo"), ("".join(p) for p in itertools.permutations("ger"))):
+    chosen = install_orders(options.orders)
+    print(f"  {len(chosen)} install orders, each with the game's resource reader and with Extra Options' thunk",
+          flush=True)
+    for variant, order in itertools.product(("stock", "eo"), chosen):
         label = f"{order} ({variant})"
         work = runs / f"{variant}-{order}"
         dlls = {}
@@ -118,8 +148,12 @@ def main():
         (dlls["e"].parent / "ExitGame.ini").write_text("[ExitGame]\nEnabled=1\n", encoding="utf-8")
         (dlls["r"].parent / "CustomRadio.ini").write_text(
             f"[CustomRadio]\nEnabled=1\nFolder={music}\nPcmDecode=0\n", encoding="utf-8")
+        (dlls["p"].parent / "Performance.ini").write_text(
+            "[Performance]\nShowFps=0\nPerfLog=0\nPerfLogFile=\nMenuRow=1\n", encoding="utf-8")
+        (dlls["k"].parent / "KeyboardMouse.ini").write_text(keyboard_ini, encoding="utf-8")
         args = [exe, order, variant, work, game_exe, build / "azimuth.exe", dlls["g"], dlls["e"], dlls["r"],
-                build / "video.xaml", build / "audio.xaml", build / "pause.xaml"]
+                dlls["p"], dlls["k"], build / "video.xaml", build / "audio.xaml", build / "pause.xaml",
+                build / "hub.xaml"]
         print(f" [{label}]", flush=True)
         try:
             run = subprocess.run([str(a) for a in args], capture_output=True, text=True, timeout=300,
@@ -132,21 +166,37 @@ def main():
                 print(line[:7] + f"{label}: " + line[7:])
                 if line.startswith("  FAIL "):
                     failures.append(f"{label}: {line[7:]}")
-            elif line.strip():
-                print("    " + line)
+            elif line.strip() and run.returncode:
+                print("    " + line)  # the plugins' log, when something failed
         if run.stderr.strip():
             print(run.stderr.rstrip())
         check(run.returncode == 0, f"{label}: combined_test exits cleanly")
-        outputs = {name: work / f"{name}_out.xaml" for name in PAGES}
+        outputs = {name: work / f"{name}_out.xaml" for name in ("video", "audio", "pause", "hub", "keyboard")}
         if not all(path.is_file() and path.stat().st_size for path in outputs.values()):
             check(False, f"{label}: every page came back")
             continue
         # Each plugin's own checks of its pages (their failures are counted below).
-        graphics.check_video(graphics.parse(outputs["video"].read_bytes()), f"{label} Video page", False)
+        video = outputs["video"].read_bytes()
+        graphics_first = order.index("g") < order.index("p")  # the plugin installed first edits the page first
+        performance.check_page(video, f"{label} Video page", eo_rows=False,
+                               graphics="first" if graphics_first else "second")
+        video_text = graphics.parse(video)
+        if not graphics_first:
+            # Performance made the list 275 px high (as Extra Options does) before Graphics read the page, and
+            # Graphics keeps that height; Performance's check above checks it, Graphics' own check wants 440.
+            video_text = re.sub(r'(<local:CommonListBox x:Name="OptionsList"[^>]*?)Height="275"', r'\1Height="440"',
+                                video_text, count=1)
+        graphics.check_video(video_text, f"{label} Video page", False)
         graphics.check_audio(graphics.parse(outputs["audio"].read_bytes()), f"{label} Audio page", False)
         exit_game.check_page(outputs["pause"].read_bytes(), f"{label} pause page", pages["pause"])
+        keyboard.check_hub(outputs["hub"].read_bytes(), f"{label} Settings hub")
+        page = outputs["keyboard"].read_bytes()
+        if b"<!-- EO:StandaloneOptionsPage -->" in page:
+            keyboard.check_page(page, f"{label} KEYBOARD & MOUSE page", source=pages["video"])
+        else:
+            check(False, f"{label}: the KEYBOARD & MOUSE page was built (its checks are left out)")
 
-    failed = len(failures) + len(graphics.failures) + len(exit_game.failures)
+    failed = len(failures) + sum(len(m.failures) for m in modules)
     print(f"{failed} failure(s)" if failed else "all tests passed")
     sys.exit(1 if failed else 0)
 
