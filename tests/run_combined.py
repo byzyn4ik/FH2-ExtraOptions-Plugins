@@ -1,4 +1,5 @@
-"""All plugins together: Azimuth Graphics Options, Exit Game, Custom Radio, Performance and Keyboard & Mouse.
+"""All plugins together: Azimuth Graphics Options, Exit Game, Custom Radio, Performance, Keyboard & Mouse and
+Language Support.
 
 Usage: py tests/run_combined.py [--zig zig.exe] [--output out] [--game <FH2 folder>] [--orders all|cover]
 
@@ -7,17 +8,21 @@ and, below --game (default ~/FH2), the game executable and media/UI.zip and
 Azimuth 1.0.4's release ZIP; without them every check skips (as on CI).
 Nothing is installed and the game is never run: the game executable and
 azimuth.exe are mapped into a test process (tests/combined_test.cpp, built
-here) once per install order of the five plugins and per state of the XAML
+here) once per install order of the six plugins and per state of the XAML
 resource call at 0x16ebb37 (the game's reader; Extra Options 0.4.4's thunk,
 with its Video page reset).
 
 Graphics, Exit Game, Performance and Keyboard & Mouse all chain that call;
-Custom Radio hooks elsewhere. --orders all (the default) runs all 120 install
-orders; --orders cover runs the 24 orders of the four plugins that chain the
-call, with Custom Radio put in each of the five places in turn. Each run
-checks that the four chain onto each other in that order, that Radio installs
-beside them, and that the Video page (Graphics' rows and Performance's FPS
-counter row, once each), the Audio page, the pause page (Exit Game's tile),
+Custom Radio and Language Support hook elsewhere. --orders all (the default)
+runs all 120 install orders of the first five, with Language Support put in
+each of the six places in turn; --orders cover runs the 24 orders of the four
+plugins that chain the call, with Custom Radio put in each of the five places
+and Language Support in each of the six in turn. Each run checks that the four
+chain onto each other in that order, that Radio installs beside them, that
+Language Support's five speech hooks lead into its hook code (its language pack
+in <work>/mods, the launcher's language its slot), and that the Video page
+(Graphics' rows and Performance's FPS counter row, once each), the Audio page,
+the pause page (Exit Game's tile),
 the Settings hub (Keyboard & Mouse's tile), the standalone KEYBOARD & MOUSE
 page (no rows of the others), the Video page reset and the pause page init
 come out right, using each plugin's own page checks from its
@@ -50,7 +55,9 @@ PLUGINS = [("azimuth-graphics-options", "g", "Azimuth Graphics Options", "Azimut
            ("exit-game", "e", "Exit Game", "ExitGame.dll", "tests/ExitGameTest.dll"),
            ("custom-radio", "r", "Custom Radio", "CustomRadio.dll", "obj/CustomRadio-test.dll"),
            ("performance", "p", "Performance", "Performance.dll", "tests/PerformanceTest.dll"),
-           ("keyboard-mouse", "k", "Keyboard & Mouse", "KeyboardMouse.dll", "tests/KeyboardMouseTest.dll")]
+           ("keyboard-mouse", "k", "Keyboard & Mouse", "KeyboardMouse.dll", "tests/KeyboardMouseTest.dll"),
+           ("lang-support", "l", "Language Support", "LangSupport.dll", "tests/LangSupportTest.dll"),
+           ("xtra-features", "x", "Xtra Features", "XtraFeatures.dll", "tests/XtraFeaturesTest.dll")]
 PAGE_PLUGINS = "gepk"  # the plugins that chain the XAML resource call
 
 failures = []
@@ -76,14 +83,19 @@ def plugin_tests(plugin_id):
 
 
 def install_orders(which):
-    """All 120 install orders, or every order of the page plugins with Radio in each place in turn."""
+    """All 120 install orders of the first five, or every order of the page plugins with Radio in each place in
+    turn; Language Support (which hooks code none of the others touch) in each of the six places in turn."""
     if which == "all":
-        return ["".join(p) for p in itertools.permutations("gerpk")]
-    chosen = []
-    for index, page_order in enumerate(itertools.permutations(PAGE_PLUGINS)):
-        place = index % 5
-        chosen.append("".join(page_order[:place]) + "r" + "".join(page_order[place:]))
-    return chosen
+        orders = ["".join(p) for p in itertools.permutations("gerpk")]
+    else:
+        orders = []
+        for index, page_order in enumerate(itertools.permutations(PAGE_PLUGINS)):
+            place = index % 5
+            orders.append("".join(page_order[:place]) + "r" + "".join(page_order[place:]))
+    orders = [order[:index % 6] + "l" + order[index % 6:] for index, order in enumerate(orders)]
+    # Xtra Features carries Exit Game too (it also chains the resource call and the pause page init; its
+    # other sites are its own): the k-th order gets it at place k mod 7, before and after Exit Game.
+    return [order[:index % 7] + "x" + order[index % 7:] for index, order in enumerate(orders)]
 
 
 def main():
@@ -122,7 +134,8 @@ def main():
         for name, entry in PAGES.items():
             pages[name] = archive.read(entry)
             (build / f"{name}.xaml").write_bytes(pages[name])
-    graphics, exit_game, radio, performance, keyboard = (plugin_tests(i) for i, *_ in PLUGINS)
+    graphics, exit_game, radio, performance, keyboard, language, _ = (plugin_tests(i) for i, *_ in PLUGINS)
+    xtra_ini = (ROOT / "plugins" / "xtra-features" / "mod" / "XtraFeatures.ini").read_text(encoding="utf-8")
     modules = (graphics, exit_game, performance, keyboard)
     music = runs / "Music"
     radio.write_music(music)
@@ -151,9 +164,13 @@ def main():
         (dlls["p"].parent / "Performance.ini").write_text(
             "[Performance]\nShowFps=0\nPerfLog=0\nPerfLogFile=\nMenuRow=1\n", encoding="utf-8")
         (dlls["k"].parent / "KeyboardMouse.ini").write_text(keyboard_ini, encoding="utf-8")
+        (dlls["x"].parent / "XtraFeatures.ini").write_text(xtra_ini, encoding="utf-8")
+        (dlls["l"].parent / "LangSupport.ini").write_text("[LangSupport]\nPack=\nVoiceSubtitles=1\n", encoding="utf-8")
+        language.write_pack(work / "mods", "Ukrainian")  # its pack, in the ru-RU slot
+        language.write_azimuth_ini(work, "ru-RU")  # <work>/data/azimuth.ini: the launcher runs ru-RU
         args = [exe, order, variant, work, game_exe, build / "azimuth.exe", dlls["g"], dlls["e"], dlls["r"],
                 dlls["p"], dlls["k"], build / "video.xaml", build / "audio.xaml", build / "pause.xaml",
-                build / "hub.xaml"]
+                build / "hub.xaml", dlls["l"], dlls["x"]]
         print(f" [{label}]", flush=True)
         try:
             run = subprocess.run([str(a) for a in args], capture_output=True, text=True, timeout=300,

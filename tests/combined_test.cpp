@@ -6,12 +6,22 @@
 //
 //   combined_test <order> <variant> <work> <game exe> <azimuth exe>
 //                 <graphics dll> <exit game dll> <radio dll> <performance dll> <keyboard & mouse dll>
-//                 <video xaml> <audio xaml> <pause xaml> <settings hub xaml>
+//                 <video xaml> <audio xaml> <pause xaml> <settings hub xaml> <language support dll>
+//                 <xtra features dll>
+//
+// "x" (Xtra Features) is in every order too: it carries Exit Game (the same
+// resource call and pause page init hooks, and the same tile: whichever of
+// the two edits the page first adds it and binds it, the other leaves it) and
+// chains its own sites (the map's ResetView call, the photo RB slot and help
+// text call, UserInterface slot 8, the thumbnail size block).
 //
 // order: the install order, a permutation of "g" (Azimuth Graphics Options),
-// "e" (Exit Game), "r" (Custom Radio), "p" (Performance) and "k" (Keyboard &
-// Mouse), as Extra Options' loader would call FH2PluginInitialize one plugin
-// after the other. variant: "stock" (the XAML resource call at game+0x16ebb37
+// "e" (Exit Game), "r" (Custom Radio), "p" (Performance), "k" (Keyboard &
+// Mouse) and "l" (Language Support), as Extra Options' loader would call
+// FH2PluginInitialize one plugin after the other. Language Support hooks five
+// speech functions none of the others touch (its voice subtitles: <work>\mods
+// holds its language pack, <work>\data\azimuth.ini runs the game in the pack's
+// slot). variant: "stock" (the XAML resource call at game+0x16ebb37
 // still calls the game's reader) or "eo" (it calls Extra Options' thunk at
 // 0x13fe354, and the Video page reset slot holds Extra Options' reset, as
 // Extra Options 0.4.4 patches them). The game image and azimuth.exe are mapped
@@ -59,6 +69,9 @@ constexpr uint32_t kResetSlot = 0x2e60900u, kResetVideo = 0xebf060u, kVideoRegis
 // Custom Radio's hooks (its src/sites.h): two vtable slots and two calls of its core group.
 constexpr uint32_t kRadioSlots[] = {0x2ec4fd0u, 0x2e76248u};
 constexpr uint32_t kRadioCalls[] = {0x10189a0u, 0x10221f2u};
+// Language Support's voice subtitle hooks (its src/voice_subtitles.c): five function entries, each a jmp
+// into its hook code.
+constexpr uint32_t kVoiceSites[] = {0xf50ee0u, 0xf51100u, 0xf512a0u, 0xc3df10u, 0x85afa0u};
 // Azimuth's volume setter (1.0.4 and 1.0.2): the Graphics plugin calls it from the Audio page.
 struct HostSites {
     uint32_t timestamp, volume_setter;
@@ -407,6 +420,10 @@ const ChainText kChainTexts[] = {
      {"the resource call at 0x16ebb37 is chained to the game's resource reader 0xaabec0",
       "the resource call at 0x16ebb37 is chained to Extra Options' resource hook",
       "the resource call at 0x16ebb37 is chained to another module's hook at"}},
+    {'x',
+     {"XAML resource call 0x16ebb37 chained onto the game's resource reader",
+      "XAML resource call 0x16ebb37 chained onto Extra Options' resource thunk",
+      "XAML resource call 0x16ebb37 chained onto another module's hook at"}},
     {'k',
      {"KBM MENU: XAML resource call 0x16ebb37 chained onto the game's resource reader 0xaabec0",
       "KBM MENU: XAML resource call 0x16ebb37 chained onto Extra Options' resource thunk 0x13fe354",
@@ -416,10 +433,11 @@ const ChainText kChainTexts[] = {
 } // namespace
 
 int wmain(int argc, wchar_t **argv) {
-    if (argc < 15) {
+    if (argc < 17) {
         fprintf(stderr, "usage: combined_test <order> <variant> <work> <game exe> <azimuth exe> <graphics dll> "
                         "<exit game dll> <radio dll> <performance dll> <keyboard & mouse dll> <video xaml> "
-                        "<audio xaml> <pause xaml> <settings hub xaml>\n");
+                        "<audio xaml> <pause xaml> <settings hub xaml> <language support dll> "
+                        "<xtra features dll>\n");
         return 2;
     }
     InitializeCriticalSection(&log_lock);
@@ -432,7 +450,9 @@ int wmain(int argc, wchar_t **argv) {
                         {'e', "Exit Game", argv[7], nullptr},
                         {'r', "Custom Radio", argv[8], nullptr},
                         {'p', "Performance", argv[9], nullptr},
-                        {'k', "Keyboard & Mouse", argv[10], nullptr}};
+                        {'k', "Keyboard & Mouse", argv[10], nullptr},
+                        {'l', "Language Support", argv[15], nullptr},
+                        {'x', "Xtra Features", argv[16], nullptr}};
     auto plugin_of = [&](char letter) -> Plugin * {
         for (Plugin &p : plugins)
             if (p.letter == letter) return &p;
@@ -470,6 +490,8 @@ int wmain(int argc, wchar_t **argv) {
     unsigned char radio_before[4][8];
     for (int i = 0; i < 2; ++i) memcpy(radio_before[i], image + kRadioSlots[i], 8);
     for (int i = 0; i < 2; ++i) memcpy(radio_before[2 + i], image + kRadioCalls[i], 5);
+    unsigned char voice_before[5][5];
+    for (int i = 0; i < 5; ++i) memcpy(voice_before[i], image + kVoiceSites[i], 5);
     void *reset_before = slot(kResetSlot), *hub_init_before = slot(kHubInitSlot);
 
     // The loader: FH2PluginInitialize of each plugin, in `order`.
@@ -492,6 +514,12 @@ int wmain(int argc, wchar_t **argv) {
             check(use && no_thread, "Keyboard & Mouse: its test build takes the mapped Azimuth as its host");
             if (use) use(host);
             if (no_thread) no_thread(1);
+        }
+        if (plugin->letter == 'l') {
+            // Its host check reads the mapped azimuth.exe, not this process' image.
+            auto use = (void (*)(const unsigned char *))(uintptr_t)GetProcAddress(plugin->module, "LangTestUseHost");
+            check(use != nullptr, "Language Support: its test build takes the mapped Azimuth as its host");
+            if (use) use(host);
         }
         auto init = (FH2PluginInitializeFn)(uintptr_t)GetProcAddress(plugin->module, "FH2PluginInitialize");
         std::wstring folder = plugin->path.substr(0, plugin->path.find_last_of(L"\\/"));
@@ -520,6 +548,10 @@ int wmain(int argc, wchar_t **argv) {
             check(after == before, "Custom Radio leaves the XAML resource call to the others");
             continue;
         }
+        if (plugin->letter == 'l') {
+            check(after == before, "Language Support leaves the XAML resource call to the others");
+            continue;
+        }
         check(after != before && jump_module(after) == plugin->module,
               std::string(plugin->name) + ": the resource call 0x16ebb37 now goes through its near jump to it");
         int which = !resource_chain.empty() ? 2 : eo ? 1 : 0;
@@ -533,9 +565,9 @@ int wmain(int argc, wchar_t **argv) {
     }
     printf("%s", host_log_text.c_str());
     size_t pages_log = log_size();
-    check(call_target(kCallSite) != first_target && resource_chain.size() == 4 &&
+    check(call_target(kCallSite) != first_target && resource_chain.size() == 5 &&
               jump_module(call_target(kCallSite)) == resource_chain.back()->module,
-          "one chain at 0x16ebb37: the four page plugins, the last one installed first in line");
+          "one chain at 0x16ebb37: the five page plugins (Xtra Features too), the last one installed first in line");
     check(logged("CUSTOM RADIO: custom station hooks installed"), "Custom Radio: its station hooks are installed");
     Plugin *radio = plugin_of('r'), *exit_game = plugin_of('e'), *keyboard = plugin_of('k');
     bool radio_in = true;
@@ -545,8 +577,47 @@ int wmain(int argc, wchar_t **argv) {
         radio_in = radio_in && jump_module(call_target(kRadioCalls[i])) == radio->module;
     }
     check(radio_in, "Custom Radio: its slots and calls lead into it");
+    // Language Support: each speech hook site is a jmp into its hook code (memory of no module, starting
+    // "FH2S"); none of the other plugins' sites moved it.
+    check(logged("LANG SUPPORT: voice subtitles installed: 4 lines"),
+          "Language Support: its voice subtitles are installed (4 lines of its pack)");
+    bool voice_in = true;
+    const unsigned char *voice_code = nullptr;
+    for (int i = 0; i < 5; ++i) {
+        const unsigned char *site = image + kVoiceSites[i];
+        int32_t displacement;
+        memcpy(&displacement, site + 1, 4);
+        const unsigned char *target = site + 5 + displacement;
+        MEMORY_BASIC_INFORMATION region;
+        bool ok = site[0] == 0xe9 && memcmp(voice_before[i], site, 5) &&
+                  VirtualQuery(target, &region, sizeof(region)) == sizeof(region) && region.State == MEM_COMMIT &&
+                  module_of(target) == nullptr;
+        if (ok && !voice_code) voice_code = (const unsigned char *)region.AllocationBase;
+        voice_in = voice_in && ok && (const unsigned char *)region.AllocationBase == voice_code;
+    }
+    check(voice_in && voice_code && !memcmp(voice_code, "FH2S", 4),
+          "Language Support: the five speech hooks jump into its one block of hook code");
+    // Exit Game in both: the one installed last holds the init slot; the one installed first is first in line
+    // on the page, adds the tile and binds it.
+    Plugin *xtra = plugin_of('x');
+    bool exit_first = strchr(order, 'e') < strchr(order, 'x');
+    Plugin *tile_owner = exit_first ? exit_game : xtra, *init_owner = exit_first ? xtra : exit_game;
     void *init_slot = slot(kPauseInitSlot);
-    check(module_of(init_slot) == exit_game->module, "Exit Game: the pause page init slot holds its init");
+    check(module_of(init_slot) == init_owner->module,
+          std::string(init_owner->name) + ": the pause page init slot holds its init (installed after " +
+              tile_owner->name + ")");
+    check(logged("XTRA FEATURES: MapZoom: ResetView call 0xd80442 chained onto the game's ResetView") &&
+              logged("XTRA FEATURES: GarageThumbnails: new garage thumbnails at 3x") &&
+              logged("XTRA FEATURES: GarageThumbnails: UserInterface slot 0x2ecfbc0 chained onto the game's") &&
+              logged("XTRA FEATURES: PhotoScan: RB functor slot 0x2e21b90 chained onto the game's") &&
+              logged("XTRA FEATURES: PhotoScan: RB help text call 0xde3735 chained") &&
+              logged("XTRA FEATURES: ExitGame: pause page init chained onto"),
+          "Xtra Features: map zoom, thumbnails, F8, photo scan and Exit Game are in, on the game's own sites");
+    check(jump_module(call_target(0xd80442u)) == xtra->module && module_of(slot(0x2e21b90u)) == xtra->module &&
+              jump_module(call_target(0xde3735u)) == xtra->module && slot(0x2ecfbc0u) != nullptr &&
+              module_of(slot(0x2ecfbc0u)) == nullptr,
+          "Xtra Features: the ResetView call, the RB slot and help text call lead into it; slot 0x2ecfbc0 holds its "
+          "stub");
     check(logged("KBM: native keyboard & mouse hooks installed") &&
               logged("KBM MENU: Settings hub init (slot 0x2e15940) chained onto the game's init 0xdc8a60"),
           "Keyboard & Mouse: its input hooks and the Settings hub init are in");
@@ -560,6 +631,7 @@ int wmain(int argc, wchar_t **argv) {
     check(logged("PERFORMANCE: ShowFps=0 and PerfLog=0: nothing is hooked until the counter is turned on"),
           "Performance: no DXGI/D3D12 hook with the counter and the log off (its GPU part is not tested here)");
     check(!logged("nothing is installed") && !logged("could not be chained") && !logged("is not as expected") &&
+              !logged("not as inspected") &&
               !logged("not as expected") && !logged("REFUSED") && !logged("no Video page row"),
           "no plugin refused anything");
 
@@ -651,8 +723,8 @@ int wmain(int argc, wchar_t **argv) {
     check(events.size() == 2 && events[0] == "extra options init 20816" &&
               events[1] == "bind 20816 PART_Button_EOExitGame",
           "the pause page init runs the previous init, then binds PART_Button_EOExitGame");
-    check(bound.size() == 1 && module_of(bound[0].second.method) == exit_game->module,
-          "the tile is bound to Exit Game's handler");
+    check(bound.size() == 1 && module_of(bound[0].second.method) == tile_owner->module,
+          std::string("the tile is bound once, to the handler of ") + tile_owner->name + " (first on the page)");
     printf("%s", host_log_text.substr(pages_log).c_str());
     printf("%d failure(s)\n", failures);
     return failures ? 1 : 0;
