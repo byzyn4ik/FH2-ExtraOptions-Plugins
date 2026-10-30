@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "id": "photo-export",
+  "name": "Photo Export",
+  "author": "Max Petrovsky (byzyn4ik)",
+  "version": "1.0.0",
+  "description": "Every photo taken in Forza Horizon 2, copied once as a JPG file into a folder (Documents\\My Games\\Forza Horizon 2\\Photos). The saves are only read.",
+  "dependencies": []
+}
