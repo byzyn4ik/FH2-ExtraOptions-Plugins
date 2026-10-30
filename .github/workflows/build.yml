@@ -3,7 +3,8 @@ name: build
 # Every push and pull request: build every plugin (plugins/*/) with Zig 0.15.2
 # and run the offline tests (those that need the game's files, Azimuth's ZIPs
 # or Extra Options' release skip themselves here, as does the all-plugins
-# test). The release ZIPs are kept as a workflow artifact. A pushed tag v*
+# test). The artifact FH2-ExtraOptions-Plugins holds the plugins' mod
+# folders, flat (unpack it into mods\); the release ZIPs go to release-zips. A pushed tag v*
 # (e.g. v1.0.0) also publishes a GitHub release with one ZIP per plugin
 # (<id>-<version>.zip, holding mods/<Mod Name>/..., which Forza Horizon 2
 # Builder downloads) and the all-in-one FH2-ExtraOptions-Plugins-<version>.zip.
@@ -64,9 +65,17 @@ jobs:
             "${name}: mods/$($mod.name)/ ($($entries.Count) files)"
           }
           if (-not (Get-ChildItem out/release -Filter 'FH2-ExtraOptions-Plugins-*.zip')) { throw 'no all-in-one ZIP' }
+      # The artifact to download and use: one flat folder per plugin (the mod
+      # folders of out/mods), to unpack into the mods folder beside Azimuth.exe.
       - uses: actions/upload-artifact@v4
         with:
           name: FH2-ExtraOptions-Plugins
+          path: out/mods/
+          retention-days: 30
+      # The release ZIPs, for the release job.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-zips
           path: out/release/*.zip
           retention-days: 30
 
@@ -79,7 +88,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: FH2-ExtraOptions-Plugins
+          name: release-zips
           path: release
       - name: Publish release
         env:
