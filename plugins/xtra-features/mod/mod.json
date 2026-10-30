@@ -1,0 +1,9 @@
+{
+  "format_version": 1,
+  "id": "xtra-features",
+  "name": "Xtra Features",
+  "author": "Max Petrovsky (byzyn4ik)",
+  "version": "1.0.0",
+  "description": "Pause map zoom-out beyond the game's limit, sharper garage thumbnails (F8 re-renders them), a photo mode car scan (RB credits the cars in view to the photo collection) and an Exit Game tile on the pause menu.",
+  "dependencies": []
+}
