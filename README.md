@@ -12,29 +12,40 @@ together in any combination and load order.
 | [Exit Game](plugins/exit-game/README.md) | An **Exit Game** tile on the pause menu's Home tab (beside Online Road Trip, made square) that closes the game | `ExitGame.ini` | none (pause menu) | Azimuth 1.0.4, Extra Options 0.4.4 |
 | [Custom Radio](plugins/custom-radio/README.md) | Your own MP3s (a `Music` folder beside `Azimuth.exe`) as one more station of the game's car radio | `CustomRadio.ini` | F9 tunes in, F7 next track, F6 restart / previous (keyboard or Xbox buttons, set in the INI) | Azimuth 1.0.4, Extra Options 0.4.4 |
 | [Performance](plugins/performance/README.md) | An FPS counter in the top-right corner (FPS, GPU load, video memory; **Detailed** adds frame times, the 1% low and the GPU frame time), an **FPS counter** row (Off / On / Detailed) on the game's **Video** page and an optional performance log (CSV) | `Performance.ini` | none (Video page row, INI) | Azimuth 1.0.4 (D3D12), Extra Options 0.4.4 |
-| [Keyboard & Mouse](plugins/keyboard-mouse/README.md) | Keyboard and mouse without a virtual controller: rebindable keys for driving and menus, mouse look, a menu pointer, key prompts, and a **KEYBOARD & MOUSE** page from a tile on the pause menu's Settings hub | `KeyboardMouse.ini` | WASD drive, Space handbrake, E/Q gears, Tab camera, R rewind, M map, P photo mode, Esc pause / back, Enter confirm, arrows in menus (all rebindable; see [the keys of Extra Options](#keys-of-keyboard--mouse-and-the-others)) | Azimuth 1.0.4 (or 1.0.2), Extra Options 0.4.4 |
+| [Keyboard & Mouse](plugins/keyboard-mouse/README.md) | Keyboard and mouse without a virtual controller: rebindable keys for driving and menus, mouse look, a menu pointer, key prompts, and a **KEYBOARD & MOUSE** page from a tile on the pause menu's Settings hub | `KeyboardMouse.ini` | WASD drive, Space handbrake, E/Q gears, Tab camera, R rewind, M map, P photo mode, Esc pause / back, Enter confirm, arrows in menus (all rebindable; see [Keyboard keys](#keyboard-keys)) | Azimuth 1.0.4 (or 1.0.2), Extra Options 0.4.4 |
 
 Use a clean Extra Options 0.4.4 release (`FH2_Extra_Options_0.4.4-azimuth.zip`)
 on Azimuth 1.0.4. A plugin that finds the game, Azimuth or Extra Options other
 than it was made for changes nothing and says why in `FH2_ExtraOptions.log`.
 Forza Horizon 2 Builder can install them for you.
 
-### Keys of Keyboard & Mouse and the others
+### Keyboard keys
 
-Extra Options 0.4.4 reads some keys itself (`[Bindings]` in
-`FH2_ExtraOptions.ini`): **F1** hides the UI, **F2** is Autodrive, **F3** the
-headlights, **F4** the roof (as its INI sets them), **Tab** jumps to a
-manufacturer in the car lists and **Esc** cancels Autodrive. Keyboard &
-Mouse's defaults use none of F1-F4 (Tab is its Camera key only while driving;
-its Esc pauses in the world, which also ends Autodrive, and goes back
-elsewhere). Esc, F2, F8, Alt and the Windows keys
-cannot be bound to it; at start it warns in the log about a key in
-`KeyboardMouse.ini` that one of Extra Options' keyboard bindings also uses in
-the same situation, and its page refuses such a key ("In use (Extra
-Options)"). Extra Options' gamepad bindings (D-pad Down for Autodrive, ...)
-read the pad itself. Custom Radio's keys (F9, F7, F6 by default) are not
-checked by Keyboard & Mouse: do not bind them there, or move Custom Radio's
-in `CustomRadio.ini`.
+Default keys of Extra Options 0.4.4 (set in `[Bindings]` of
+`FH2_ExtraOptions.ini`) and of the plugins:
+
+| Key | Used by | Action |
+|---|---|---|
+| F1 | Extra Options | Hide the UI |
+| F2 | Extra Options | Autodrive on / off |
+| F3 | Extra Options | Headlights |
+| F4 | Extra Options | Roof (hold while stationary) |
+| Tab | Extra Options | Jump to a manufacturer in the car lists |
+| Tab | Keyboard & Mouse | Camera (only while driving) |
+| F9 / F7 / F6 | Custom Radio | Tune in / next track / restart or previous track |
+| WASD, Space, E/Q, R, M, P, Esc, Enter, arrows | Keyboard & Mouse | Driving and menus (see its page) |
+
+In Keyboard & Mouse:
+
+- Its defaults don't clash with any of the keys above.
+- Esc (pause / back), F2, F8, Alt and the Windows keys can't be bound.
+- If you bind a key that Extra Options uses in the same situation, the log
+  warns at start and the in-game page refuses it ("In use (Extra Options)").
+- It does **not** check Custom Radio's keys: don't bind F9, F7 or F6 there,
+  or change Custom Radio's keys in `CustomRadio.ini`.
+
+Extra Options' gamepad bindings (D-pad Down for Autodrive, ...) read the pad
+directly and are not affected by any plugin.
 
 ## Install
 
@@ -113,27 +124,35 @@ writes, below `out\`:
   else `VERSION`);
 - `build\<id>\...`: each plugin's test builds, objects and test runs.
 
-`--plugin <id>` (repeatable) builds only those (the tests of Performance and
-Keyboard & Mouse also use Azimuth Graphics Options' source or test build, so
-build it with them). `--test` runs every plugin's offline tests and then
-`tests\run_combined.py`, which loads the test builds of all five plugins into
-one process with the game executable and Azimuth 1.0.4 mapped and relocated,
-in all 120 install orders, each with the XAML resource call at `0x16ebb37` as
-the game and as Extra Options 0.4.4 leave it (with Extra Options' Video page
-reset): Graphics, Exit Game, Performance and Keyboard & Mouse all chain that
-call and must stack into one chain that reads each page once, and Custom
-Radio installs beside them. Each run checks the Video page (Graphics' rows
-and the FPS counter row, once each), the Audio page, the pause page (Exit
-Game's tile), the Settings hub (Keyboard & Mouse's tile), the standalone
-KEYBOARD & MOUSE page (none of the others' rows), a page nobody edits, the
-Video page reset (Keyboard & Mouse's page resets only its options, the Video
-page still reaches Extra Options' or the game's reset) and the pause page
-init, with each plugin's own page checks (`--orders cover` runs 24 orders
-instead). Performance's DXGI/D3D12 part is tested by its own tests
-(`d3d12_test.exe`, on the GPU when there is one), not there. No test runs the
-game or writes to its files; they read them from `--game` (default
-`%USERPROFILE%\FH2`), and the tests that need them skip themselves when they
-are missing (as on CI).
+Options:
+
+- `--plugin <id>` (repeatable) builds only those plugins. Performance's and
+  Keyboard & Mouse's tests also use Azimuth Graphics Options, so build it
+  with them.
+- `--test` runs every plugin's offline tests, then the combined test.
+- `--game <FH2 folder>` is where the tests read the game files from (default
+  `%USERPROFILE%\FH2`). Tests never run the game or write to its files; the
+  ones that need game files skip themselves when they're missing, as on CI.
+
+The **combined test** (`tests\run_combined.py`) loads all five plugins' test
+builds into one process with the game executable and Azimuth 1.0.4 mapped.
+It runs every install order (120; `--orders cover` runs 24), both with the
+game's own page loading and with Extra Options 0.4.4's patch on it. Four
+plugins hook the same page-loading call (`0x16ebb37`), so each run checks
+that they stack into one chain and that:
+
+- the Video page gets Graphics' rows and the FPS counter row, once each;
+- the Audio page gets Graphics' sound rows;
+- the pause menu gets Exit Game's tile;
+- the Settings hub gets the KEYBOARD & MOUSE tile, and that page stays
+  standalone (no other plugin's rows);
+- Reset on the KEYBOARD & MOUSE page resets only its options, while Reset on
+  the Video page still reaches Extra Options' or the game's reset;
+- every page is read once, and pages nobody edits are left untouched;
+- Custom Radio installs beside the others.
+
+Performance's DXGI/D3D12 hooks are tested by its own `d3d12_test.exe` (on
+the GPU when there is one), not in the combined test.
 
 ### Adding a plugin
 
