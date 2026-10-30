@@ -15,6 +15,8 @@ together in any combination and load order.
 | [Keyboard & Mouse](plugins/keyboard-mouse/README.md) | Keyboard and mouse without a virtual controller: rebindable keys for driving and menus, mouse look, a menu pointer, key prompts, and a **KEYBOARD & MOUSE** page from a tile on the pause menu's Settings hub | `KeyboardMouse.ini` | WASD drive, Space handbrake, E/Q gears, Tab camera, R rewind, M map, P photo mode, Esc pause / back, Enter confirm, arrows in menus (all rebindable; see [Keyboard keys](#keyboard-keys)) | Azimuth 1.0.4 (or 1.0.2), Extra Options 0.4.4 |
 | [Photo Export](plugins/photo-export/README.md) | Every photo taken in the game, copied once as a JPG file into `Documents\My Games\Forza Horizon 2\Photos` (or a folder you set); the saves are only read | `PhotoExport.ini` | none | Azimuth 1.0.4 (1.0.1 to 1.0.3 too), Extra Options 0.4.4 |
 | [Saves in Documents (mirror)](plugins/documents-saves/README.md) | A verified copy (SHA-256) of every save in `Documents\My Games\Forza Horizon 2\Saves\1A96545B`, a few seconds after the game writes it. A mirror, not a move: the game keeps its saves in Azimuth's folder, which the plugin only reads; nothing is deleted | `DocumentsSaves.ini` | none | Azimuth 1.0.4 (1.0.1 to 1.0.3 too), Extra Options 0.4.4 |
+| [Xtra Features](plugins/xtra-features/README.md) | Map zoom (the pause map opens and zooms out farther), sharper garage thumbnails (F8 re-renders them), photo scan (RB in photo mode credits the cars in view without a photo) and the Exit Game tile, each switchable | `XtraFeatures.ini` | F8 (thumbnails), RB in photo mode | Azimuth 1.0.4, Extra Options 0.4.4 |
+| [Language Support](plugins/lang-support/README.md) | A language pack (an ordinary mod folder) in one of the game's language slots, and subtitles for spoken lines the game shows none for | `LangSupport.ini` | none | Azimuth 1.0.4 (or 1.0.2), Extra Options 0.4.4 |
 
 Use a clean Extra Options 0.4.4 release (`FH2_Extra_Options_0.4.4-azimuth.zip`)
 on Azimuth 1.0.4. A plugin that finds the game, Azimuth or Extra Options other
@@ -84,6 +86,12 @@ directly and are not affected by any plugin.
        Saves in Documents (mirror)\
          mod.json
          plugins\DocumentsSaves.dll, DocumentsSaves.ini
+       Xtra Features\
+         mod.json
+         plugins\XtraFeatures.dll, XtraFeatures.ini
+       Language Support\
+         mod.json
+         plugins\LangSupport.dll, LangSupport.ini
    ```
 
 4. Start the game. Each plugin logs what it did in `FH2_ExtraOptions.log`.
@@ -184,7 +192,7 @@ CI (`.github/workflows/build.yml`) builds and tests every push and pull
 request with Zig 0.15.2 (checked by SHA-256). A pushed tag `v<version>`
 publishes a release with each plugin's `<id>-<version>.zip` and the
 all-in-one `FH2-ExtraOptions-Plugins-<version>.zip`. Release assets are named
-by the plugin's id (`keyboard-mouse-1.0.0.zip`), never by its mod name, and
+by the plugin's id (`keyboard-mouse-0.0.1.zip`), never by its mod name, and
 Forza Horizon 2 Builder finds them by `^<id>-[0-9]...\.zip$`; inside, the mod
 folder keeps its name (`mods/Keyboard & Mouse/...`).
 

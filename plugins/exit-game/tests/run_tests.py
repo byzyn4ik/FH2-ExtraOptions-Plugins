@@ -835,7 +835,7 @@ def test_plugin(output, pe, native, eo_page):
         check(ready == 1, "FH2PluginInitialize returns TRUE")
         for line in plugin.lines:
             print("    log:", line.rstrip())
-        check(plugin.said("EXIT GAME: plugin 1.0.0 for Extra Options 0.4.4"), "it logs its version and the host's")
+        check(plugin.said("EXIT GAME: plugin 0.0.1 for Extra Options 0.4.4"), "it logs its version and the host's")
         slot = struct.unpack("<Q", peek(base + PAUSE_INIT_SLOT, 8))[0]
         check(slot == dll.ExitGameTestHandlers(0), "the pause page init slot now holds the plugin's init")
         target = call_target(base, RESOURCE_CALL)

@@ -1376,7 +1376,7 @@ def test_plugin(output, pe, hosts, hub_native, video, eo_page):
         check(ready == 1, "FH2PluginInitialize returns TRUE")
         for line in plugin.lines:
             print("    log:", line.rstrip()[:150])
-        check(plugin.said("KBM: Keyboard & Mouse 1.0.0 for Extra Options 0.4.4") and
+        check(plugin.said("KBM: Keyboard & Mouse 0.0.1 for Extra Options 0.4.4") and
               plugin.said("KBM: host Azimuth 1.0.4 (TimeDateStamp 0x6ae393eb, SizeOfImage 0x8a2000)"),
               "it logs its version, Extra Options' and the host")
         check(plugin.said("KBM: native keyboard & mouse hooks installed") and dll.KbmTestInstalled() == 1,

@@ -128,8 +128,8 @@ def test_package(output):
     manifest = json.loads((mod / "mod.json").read_text(encoding="utf-8"))
     check(manifest.get("format_version") == 1 and valid_mod_id(manifest.get("id")) and manifest.get("id") == "documents-saves",
           f"mod.json: format_version 1 and the id documents-saves ({manifest.get('id')})")
-    check(manifest.get("name") == MOD_NAME and manifest.get("version") == "1.0.0",
-          "mod.json: name Saves in Documents (mirror), version 1.0.0")
+    check(manifest.get("name") == MOD_NAME and manifest.get("version") == "0.0.1",
+          "mod.json: name Saves in Documents (mirror), version 0.0.1")
     check(isinstance(manifest.get("dependencies"), list) and "media" not in manifest and "database" not in manifest,
           "mod.json: dependencies list, no media or database (nothing for the media merge)")
     files = sorted(str(p.relative_to(mod)).replace("\\", "/") for p in mod.rglob("*") if p.is_file())

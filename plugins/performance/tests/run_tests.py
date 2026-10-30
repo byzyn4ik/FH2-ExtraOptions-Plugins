@@ -436,7 +436,7 @@ def test_guards(loader):
     ok = loader.initialize("[Performance]\nShowFps=2\nPerfLog=1\n", adapter=2)
     check(ok == 1 and loader.said("does not run on Azimuth") and loader.dll.PerfTestWaitAttach(300) == -1,
           "not Azimuth (Mezcal): TRUE, logged, no attach")
-    check(loader.said("plugin 1.0.0 for Extra Options 0.4.4; FPS counter detailed, performance log on"),
+    check(loader.said("plugin 0.0.1 for Extra Options 0.4.4; FPS counter detailed, performance log on"),
           "the log line names the version and the settings")
 
 

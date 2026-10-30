@@ -3,7 +3,7 @@
   "id": "lang-support",
   "name": "Language Support",
   "author": "Max Petrovsky (byzyn4ik)",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Language packs as mod folders (a language the game does not ship, in one of its language slots) and subtitles for spoken lines the game shows none for.",
   "dependencies": []
 }

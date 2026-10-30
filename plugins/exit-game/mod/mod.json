@@ -3,7 +3,7 @@
   "id": "exit-game",
   "name": "Exit Game",
   "author": "Max Petrovsky (byzyn4ik)",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "An Exit Game tile on the pause menu's Home tab (beside Online Road Trip, made square) that closes Forza Horizon 2.",
   "dependencies": []
 }

@@ -13,7 +13,7 @@
 #include "radio.h"
 #include "sites.h"
 
-#define CUSTOM_RADIO_VERSION "1.0.0"
+#define CUSTOM_RADIO_VERSION "0.0.1"
 
 static RadioConfig config;
 static KeyEdges edges;

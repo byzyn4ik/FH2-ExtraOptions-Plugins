@@ -5,10 +5,10 @@ name: build
 # or Extra Options' release skip themselves here, as does the all-plugins
 # test). The artifact FH2-ExtraOptions-Plugins holds the plugins' mod
 # folders, flat (unpack it into mods\); the release ZIPs go to release-zips. A pushed tag v*
-# (e.g. v1.0.0) also publishes a GitHub release with one ZIP per plugin
+# (e.g. v0.0.1) also publishes a GitHub release with one ZIP per plugin
 # (<id>-<version>.zip, holding mods/<Mod Name>/..., which Forza Horizon 2
 # Builder downloads) and the all-in-one FH2-ExtraOptions-Plugins-<version>.zip.
-# Asset names use the plugin's id (keyboard-mouse-1.0.0.zip), never its mod
+# Asset names use the plugin's id (keyboard-mouse-0.0.1.zip), never its mod
 # name ("Keyboard & Mouse" is only the folder inside the ZIP).
 on:
   push:
@@ -96,5 +96,8 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           ls -l release
+          # v0.x and tags with a suffix (v1.0.0-beta) are pre-releases (alpha).
+          prerelease=
+          case "$TAG" in v0.*|*-*) prerelease=--prerelease ;; esac
           gh release create "$TAG" release/*.zip --repo "$GITHUB_REPOSITORY" \
-            --title "FH2 Extra Options plugins ${TAG#v}" --generate-notes
+            --title "FH2 Extra Options plugins ${TAG#v}${prerelease:+ (alpha)}" --generate-notes $prerelease

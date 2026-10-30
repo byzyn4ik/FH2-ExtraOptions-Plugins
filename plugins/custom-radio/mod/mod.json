@@ -3,7 +3,7 @@
   "id": "custom-radio",
   "name": "Custom Radio",
   "author": "Max Petrovsky (byzyn4ik)",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Your own MP3s as an extra station on the game's radio. Keys: F9 tunes in, F7 next track, F6 restart / previous track. Settings in plugins/CustomRadio.ini.",
   "dependencies": []
 }

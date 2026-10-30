@@ -27,7 +27,7 @@
 #include "call_chain.h"
 #endif
 
-#define PLUGIN_VERSION "1.1.0"
+#define PLUGIN_VERSION "0.0.1"
 #define PLUGIN_EXPORT extern "C" __declspec(dllexport)
 
 #ifdef AZG_TEST_EXPORTS

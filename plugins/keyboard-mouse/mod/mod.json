@@ -3,7 +3,7 @@
   "id": "keyboard-mouse",
   "name": "Keyboard & Mouse",
   "author": "Max Petrovsky (byzyn4ik)",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Play with a keyboard and mouse without a virtual controller: rebindable keys for driving and menus, mouse look, a menu pointer, and a KEYBOARD & MOUSE page on the pause menu's Settings hub.",
   "dependencies": []
 }
