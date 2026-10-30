@@ -7,6 +7,8 @@ name: build
 # (e.g. v1.0.0) also publishes a GitHub release with one ZIP per plugin
 # (<id>-<version>.zip, holding mods/<Mod Name>/..., which Forza Horizon 2
 # Builder downloads) and the all-in-one FH2-ExtraOptions-Plugins-<version>.zip.
+# Asset names use the plugin's id (keyboard-mouse-1.0.0.zip), never its mod
+# name ("Keyboard & Mouse" is only the folder inside the ZIP).
 on:
   push:
     branches: ['**']
@@ -42,6 +44,26 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag') { $version = @('--version', $env:GITHUB_REF_NAME.Substring(1)) }
           python build.py --zig $env:ZIG --all --test --output out @version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check the release ZIPs
+        shell: pwsh
+        run: |
+          # One <id>-<version>.zip per plugins/<id>/ (the name Forza Horizon 2 Builder looks for), holding
+          # mods/<Mod Name>/mod.json, and the all-in-one ZIP.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          foreach ($plugin in Get-ChildItem plugins -Directory) {
+            if (-not (Test-Path "$($plugin.FullName)/mod/mod.json")) { continue }
+            $mod = Get-Content "$($plugin.FullName)/mod/mod.json" -Raw | ConvertFrom-Json
+            $name = "$($mod.id)-$($mod.version).zip"
+            if ($name -notmatch '^[a-z0-9-]+-[0-9][0-9.]*\.zip$') { throw "bad asset name $name" }
+            $zip = Join-Path out/release $name
+            if (-not (Test-Path -LiteralPath $zip)) { throw "missing $zip" }
+            $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $zip).Path)
+            $entries = @($archive.Entries | ForEach-Object FullName)
+            $archive.Dispose()
+            if ($entries -notcontains "mods/$($mod.name)/mod.json") { throw "$name has no mods/$($mod.name)/mod.json" }
+            "${name}: mods/$($mod.name)/ ($($entries.Count) files)"
+          }
+          if (-not (Get-ChildItem out/release -Filter 'FH2-ExtraOptions-Plugins-*.zip')) { throw 'no all-in-one ZIP' }
       - uses: actions/upload-artifact@v4
         with:
           name: FH2-ExtraOptions-Plugins
